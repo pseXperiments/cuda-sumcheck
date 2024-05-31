@@ -1,5 +1,5 @@
 [package]
-name = "sumcheck_test"
+name = "test"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,3 +10,4 @@ cust = "0.3"
 
 [build-dependencies]
 cuda_builder = "0.3.0"
+
