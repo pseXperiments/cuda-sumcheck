@@ -11,6 +11,8 @@ cudarc = "0.11.3"
 ff = "0.13.0"
 rayon = "1.8"
 itertools = "0.10.5"
+halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.3", package = "halo2curves" }
+rand = "0.8"
 
 [build-dependencies]
 bindgen = "0.66.1"
