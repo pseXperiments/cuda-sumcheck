@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 cudarc = "0.11.3"
 ff = "0.13.0"
 rayon = "1.8"
+itertools = "0.10.5"
 
 [build-dependencies]
 bindgen = "0.66.1"
