@@ -8,17 +8,20 @@ use regex::Regex;
 
 fn main() {
     // Tell cargo to invalidate the built crate whenever files of interest changes.
-    println!("cargo:rerun-if-changed={}", "cuda");
+    println!("cargo:rerun-if-changed=src/cuda/kernels/multilinear.cu");
+    println!("cargo:rerun-if-changed=src/cuda/kernels/sumcheck.cu");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Specify the desired architecture version.
     let arch = "compute_86"; // For example, using SM 8.6 (Ampere architecture).
     let code = "sm_86"; // For the same SM 8.6 (Ampere architecture).
+    let compiler = "clang-16"; // Compiler for nvcc
+    let language_std = "c++20"; // Language standard in which device functions are written
 
     // build the cuda kernels
-    let cuda_src = PathBuf::from("src/cuda/kernels/sumcheck.cu");
-    let ptx_file = out_dir.join("sumcheck.ptx");
+    let cuda_src = PathBuf::from("src/cuda/kernels/multilinear.cu");
+    let ptx_file = out_dir.join("multilinear.ptx");
 
     let nvcc_status = Command::new("nvcc")
         .arg("-ptx")
@@ -27,6 +30,9 @@ fn main() {
         .arg(&cuda_src)
         .arg(format!("-arch={}", arch))
         .arg(format!("-code={}", code))
+        .arg(format!("-ccbin={}", compiler))
+        .arg(format!("-std={}", language_std))
+        .arg("-allow-unsupported-compiler") // workaround to use clang-16 compiler with nvcc
         .status()
         .unwrap();
 
