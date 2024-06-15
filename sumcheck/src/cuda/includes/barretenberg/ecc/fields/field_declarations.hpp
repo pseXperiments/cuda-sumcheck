@@ -3,7 +3,7 @@
 #include "../../common/compiler_hints.hpp"
 #include "../../numeric/random/engine.hpp"
 #include "../../numeric/uint128/uint128.hpp"
-#include "../../numeric/uint256/uint256.hpp"
+#include "../../numeric/uint256/uint256_impl.hpp"
 #include <array>
 #include <cstdint>
 #include <iostream>

@@ -111,5 +111,3 @@ class Bn254FqParams {
 using fq = field<Bn254FqParams>;
 
 } // namespace bb
-
-// NOLINTEND(cppcoreguidelines-avoid-c-arrays)
