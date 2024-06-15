@@ -33,6 +33,7 @@ fn main() {
         .arg(format!("-ccbin={}", compiler))
         .arg(format!("-std={}", language_std))
         .arg("-allow-unsupported-compiler") // workaround to use clang-16 compiler with nvcc
+        .arg("--expt-relaxed-constexpr")
         .status()
         .unwrap();
 
