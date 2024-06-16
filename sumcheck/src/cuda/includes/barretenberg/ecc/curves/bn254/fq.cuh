@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <iomanip>
 
-#include "../../fields/field.hpp"
+#include "../../fields/field.cuh"
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays)
 namespace bb {

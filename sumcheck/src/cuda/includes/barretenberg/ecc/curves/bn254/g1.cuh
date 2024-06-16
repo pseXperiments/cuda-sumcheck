@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../groups/group.hpp"
-#include "./fq.hpp"
-#include "./fr.hpp"
+#include "../../groups/group.cuh"
+#include "./fq.cuh"
+#include "./fr.cuh"
 
 namespace bb {
 struct Bn254G1Params {

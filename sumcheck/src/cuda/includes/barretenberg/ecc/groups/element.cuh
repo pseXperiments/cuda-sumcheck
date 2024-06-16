@@ -1,10 +1,9 @@
 #pragma once
 
-#include "affine_element.hpp"
+#include "affine_element.cuh"
 #include "../../common/compiler_hints.hpp"
 #include "../../common/mem.hpp"
-#include "../../numeric/random/engine.hpp"
-#include "../../numeric/uint256/uint256.hpp"
+#include "../../numeric/uint256/uint256.cuh"
 #include "wnaf.hpp"
 #include <array>
 #include <random>
@@ -48,8 +47,6 @@ template <class Fq, class Fr, class Params> class alignas(32) element {
     constexpr element& operator=(element&& other) noexcept;
 
     constexpr operator affine_element<Fq, Fr, Params>() const noexcept;
-
-    static element random_element(numeric::RNG* engine = nullptr) noexcept;
 
     constexpr element dbl() const noexcept;
     constexpr void self_dbl() noexcept;
@@ -106,29 +103,6 @@ template <class Fq, class Fr, class Params> class alignas(32) element {
     friend class TestElementPrivate;
     element mul_without_endomorphism(const Fr& scalar) const noexcept;
     element mul_with_endomorphism(const Fr& scalar) const noexcept;
-
-    template <typename = typename std::enable_if<Params::can_hash_to_curve>>
-    static element random_coordinates_on_curve(numeric::RNG* engine = nullptr) noexcept;
-    // {
-    //     bool found_one = false;
-    //     Fq yy;
-    //     Fq x;
-    //     Fq y;
-    //     Fq t0;
-    //     while (!found_one) {
-    //         x = Fq::random_element(engine);
-    //         yy = x.sqr() * x + Params::b;
-    //         if constexpr (Params::has_a) {
-    //             yy += (x * Params::a);
-    //         }
-    //         y = yy.sqrt();
-    //         t0 = y.sqr();
-    //         found_one = (yy == t0);
-    //     }
-    //     return { x, y, Fq::one() };
-    // }
-    // for serialization: update with new fields
-    // TODO(https://github.com/AztecProtocol/barretenberg/issues/908) point at inifinty isn't handled
 
     static void conditional_negate_affine(const affine_element<Fq, Fr, Params>& in,
                                           affine_element<Fq, Fr, Params>& out,

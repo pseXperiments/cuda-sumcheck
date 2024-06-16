@@ -1,9 +1,8 @@
 #pragma once
 #include "../../common/assert.hpp"
 #include "../../common/compiler_hints.hpp"
-#include "../../numeric/random/engine.hpp"
 #include "../../numeric/uint128/uint128.hpp"
-#include "../../numeric/uint256/uint256_impl.hpp"
+#include "../../numeric/uint256/uint256_impl.cuh"
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -52,33 +51,33 @@ template <class Params_> struct alignas(32) field {
     //  std::array<field, N> arr {}; // zero-initialized, preferable for moderate N
     field() = default;
 
-    constexpr field(const numeric::uint256_t& input) noexcept
+    __device__ constexpr field(const numeric::uint256_t& input) noexcept
         : data{ input.data[0], input.data[1], input.data[2], input.data[3] }
     {
         self_to_montgomery_form();
     }
 
     // NOLINTNEXTLINE (unsigned long is platform dependent, which we want in this case)
-    constexpr field(const unsigned long input) noexcept
+    __device__ constexpr field(const unsigned long input) noexcept
         : data{ input, 0, 0, 0 }
     {
         self_to_montgomery_form();
     }
 
-    constexpr field(const unsigned int input) noexcept
+    __device__ constexpr field(const unsigned int input) noexcept
         : data{ input, 0, 0, 0 }
     {
         self_to_montgomery_form();
     }
 
     // NOLINTNEXTLINE (unsigned long long is platform dependent, which we want in this case)
-    constexpr field(const unsigned long long input) noexcept
+    __device__ constexpr field(const unsigned long long input) noexcept
         : data{ input, 0, 0, 0 }
     {
         self_to_montgomery_form();
     }
 
-    constexpr field(const int input) noexcept
+    __device__ constexpr field(const int input) noexcept
         : data{ 0, 0, 0, 0 }
     {
         if (input < 0) {
@@ -98,63 +97,47 @@ template <class Params_> struct alignas(32) field {
         }
     }
 
-    constexpr field(const uint64_t a, const uint64_t b, const uint64_t c, const uint64_t d) noexcept
+    __device__ constexpr field(const uint64_t a, const uint64_t b, const uint64_t c, const uint64_t d) noexcept
         : data{ a, b, c, d } {};
 
-    /**
-     * @brief Convert a 512-bit big integer into a field element.
-     *
-     * @details Used for deriving field elements from random values. 512-bits prevents biased output as 2^512>>modulus
-     *
-     */
-    constexpr explicit field(const uint512_t& input) noexcept
-    {
-        uint256_t value = (input % modulus).lo;
-        data[0] = value.data[0];
-        data[1] = value.data[1];
-        data[2] = value.data[2];
-        data[3] = value.data[3];
-        self_to_montgomery_form();
-    }
-
-    constexpr explicit field(std::string input) noexcept
+    __device__ constexpr explicit field(std::string input) noexcept
     {
         uint256_t value(input);
         *this = field(value);
     }
 
-    constexpr explicit operator bool() const
+    __device__ constexpr explicit operator bool() const
     {
         field out = from_montgomery_form();
         ASSERT(out.data[0] == 0 || out.data[0] == 1);
         return static_cast<bool>(out.data[0]);
     }
 
-    constexpr explicit operator uint8_t() const
+    __device__ constexpr explicit operator uint8_t() const
     {
         field out = from_montgomery_form();
         return static_cast<uint8_t>(out.data[0]);
     }
 
-    constexpr explicit operator uint16_t() const
+    __device__ constexpr explicit operator uint16_t() const
     {
         field out = from_montgomery_form();
         return static_cast<uint16_t>(out.data[0]);
     }
 
-    constexpr explicit operator uint32_t() const
+    __device__ constexpr explicit operator uint32_t() const
     {
         field out = from_montgomery_form();
         return static_cast<uint32_t>(out.data[0]);
     }
 
-    constexpr explicit operator uint64_t() const
+    __device__ constexpr explicit operator uint64_t() const
     {
         field out = from_montgomery_form();
         return out.data[0];
     }
 
-    constexpr explicit operator uint128_t() const
+    __device__ constexpr explicit operator uint128_t() const
     {
         field out = from_montgomery_form();
         uint128_t lo = out.data[0];
@@ -162,7 +145,7 @@ template <class Params_> struct alignas(32) field {
         return (hi << 64) | lo;
     }
 
-    constexpr operator uint256_t() const noexcept
+    __device__ constexpr operator uint256_t() const noexcept
     {
         field out = from_montgomery_form();
         return uint256_t(out.data[0], out.data[1], out.data[2], out.data[3]);
@@ -180,8 +163,9 @@ template <class Params_> struct alignas(32) field {
     constexpr ~field() noexcept = default;
     alignas(32) uint64_t data[4]; // NOLINT
 
-    static constexpr uint256_t modulus =
-        uint256_t{ Params::modulus_0, Params::modulus_1, Params::modulus_2, Params::modulus_3 };
+    static constexpr __device__ uint256_t get_modulus() {
+        return uint256_t{ Params::modulus_0, Params::modulus_1, Params::modulus_2, Params::modulus_3 };
+    }
 #if defined(__SIZEOF_INT128__) && !defined(__wasm__)
     static constexpr uint256_t r_squared_uint{
         Params_::r_squared_0, Params_::r_squared_1, Params_::r_squared_2, Params_::r_squared_3
@@ -287,45 +271,45 @@ template <class Params_> struct alignas(32) field {
         return result;
     }
 
-    BB_INLINE constexpr field operator*(const field& other) const noexcept;
-    BB_INLINE constexpr field operator+(const field& other) const noexcept;
-    BB_INLINE constexpr field operator-(const field& other) const noexcept;
-    BB_INLINE constexpr field operator-() const noexcept;
-    constexpr field operator/(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr field operator*(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr field operator+(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr field operator-(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr field operator-() const noexcept;
+    __device__ constexpr field operator/(const field& other) const noexcept;
 
     // prefix increment (++x)
-    BB_INLINE constexpr field operator++() noexcept;
+    BB_INLINE __device__ constexpr field operator++() noexcept;
     // postfix increment (x++)
     // NOLINTNEXTLINE
-    BB_INLINE constexpr field operator++(int) noexcept;
+    BB_INLINE __device__ constexpr field operator++(int) noexcept;
 
-    BB_INLINE constexpr field& operator*=(const field& other) noexcept;
-    BB_INLINE constexpr field& operator+=(const field& other) noexcept;
-    BB_INLINE constexpr field& operator-=(const field& other) noexcept;
-    constexpr field& operator/=(const field& other) noexcept;
+    BB_INLINE __device__ constexpr field& operator*=(const field& other) noexcept;
+    BB_INLINE __device__ constexpr field& operator+=(const field& other) noexcept;
+    BB_INLINE __device__ constexpr field& operator-=(const field& other) noexcept;
+    __device__ constexpr field& operator/=(const field& other) noexcept;
 
     // NOTE: comparison operators exist so that `field` is comparible with stl methods that require them.
     //       (e.g. std::sort)
     //       Finite fields do not have an explicit ordering, these should *NEVER* be used in algebraic algorithms.
-    BB_INLINE constexpr bool operator>(const field& other) const noexcept;
-    BB_INLINE constexpr bool operator<(const field& other) const noexcept;
-    BB_INLINE constexpr bool operator==(const field& other) const noexcept;
-    BB_INLINE constexpr bool operator!=(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr bool operator>(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr bool operator<(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr bool operator==(const field& other) const noexcept;
+    BB_INLINE __device__ constexpr bool operator!=(const field& other) const noexcept;
 
-    BB_INLINE constexpr field to_montgomery_form() const noexcept;
-    BB_INLINE constexpr field from_montgomery_form() const noexcept;
+    BB_INLINE __device__ constexpr field to_montgomery_form() const noexcept;
+    BB_INLINE __device__ constexpr field from_montgomery_form() const noexcept;
 
-    BB_INLINE constexpr field sqr() const noexcept;
-    BB_INLINE constexpr void self_sqr() noexcept;
+    BB_INLINE __device__ constexpr field sqr() const noexcept;
+    BB_INLINE __device__ constexpr void self_sqr() noexcept;
 
-    BB_INLINE constexpr field pow(const uint256_t& exponent) const noexcept;
-    BB_INLINE constexpr field pow(uint64_t exponent) const noexcept;
+    BB_INLINE __device__ constexpr field pow(const uint256_t& exponent) const noexcept;
+    BB_INLINE __device__ constexpr field pow(uint64_t exponent) const noexcept;
     static_assert(Params::modulus_0 != 1);
     static constexpr uint256_t modulus_minus_two =
         uint256_t(Params::modulus_0 - 2ULL, Params::modulus_1, Params::modulus_2, Params::modulus_3);
-    constexpr field invert() const noexcept;
-    static void batch_invert(std::span<field> coeffs) noexcept;
-    static void batch_invert(field* coeffs, size_t n) noexcept;
+    __device__ constexpr field invert() const noexcept;
+    static __device__ void batch_invert(std::span<field> coeffs) noexcept;
+    static __device__ void batch_invert(field* coeffs, size_t n) noexcept;
     /**
      * @brief Compute square root of the field element.
      *
@@ -333,17 +317,17 @@ template <class Params_> struct alignas(32) field {
      */
     constexpr std::pair<bool, field> sqrt() const noexcept;
 
-    BB_INLINE constexpr void self_neg() noexcept;
+    BB_INLINE __device__ constexpr void self_neg() noexcept;
 
-    BB_INLINE constexpr void self_to_montgomery_form() noexcept;
-    BB_INLINE constexpr void self_from_montgomery_form() noexcept;
+    BB_INLINE __device__ constexpr void self_to_montgomery_form() noexcept;
+    BB_INLINE __device__ constexpr void self_from_montgomery_form() noexcept;
 
-    BB_INLINE constexpr void self_conditional_negate(uint64_t predicate) noexcept;
+    BB_INLINE __device__ constexpr void self_conditional_negate(uint64_t predicate) noexcept;
 
-    BB_INLINE constexpr field reduce_once() const noexcept;
-    BB_INLINE constexpr void self_reduce_once() noexcept;
+    BB_INLINE __device__ constexpr field reduce_once() const noexcept;
+    BB_INLINE __device__ constexpr void self_reduce_once() noexcept;
 
-    BB_INLINE constexpr void self_set_msb() noexcept;
+    BB_INLINE __device__ constexpr void self_set_msb() noexcept;
     [[nodiscard]] BB_INLINE constexpr bool is_msb_set() const noexcept;
     [[nodiscard]] BB_INLINE constexpr uint64_t is_msb_set_word() const noexcept;
 
@@ -472,53 +456,6 @@ template <class Params_> struct alignas(32) field {
         };
     }
 
-    static void split_into_endomorphism_scalars_384(const field& input, field& k1_out, field& k2_out)
-    {
-        constexpr field minus_b1f{
-            Params::endo_minus_b1_lo,
-            Params::endo_minus_b1_mid,
-            0,
-            0,
-        };
-        constexpr field b2f{
-            Params::endo_b2_lo,
-            Params::endo_b2_mid,
-            0,
-            0,
-        };
-        constexpr uint256_t g1{
-            Params::endo_g1_lo,
-            Params::endo_g1_mid,
-            Params::endo_g1_hi,
-            Params::endo_g1_hihi,
-        };
-        constexpr uint256_t g2{
-            Params::endo_g2_lo,
-            Params::endo_g2_mid,
-            Params::endo_g2_hi,
-            Params::endo_g2_hihi,
-        };
-
-        field kf = input.reduce_once();
-        uint256_t k{ kf.data[0], kf.data[1], kf.data[2], kf.data[3] };
-
-        uint512_t c1 = (uint512_t(k) * static_cast<uint512_t>(g1)) >> 384;
-        uint512_t c2 = (uint512_t(k) * static_cast<uint512_t>(g2)) >> 384;
-
-        field c1f{ c1.lo.data[0], c1.lo.data[1], c1.lo.data[2], c1.lo.data[3] };
-        field c2f{ c2.lo.data[0], c2.lo.data[1], c2.lo.data[2], c2.lo.data[3] };
-
-        c1f.self_to_montgomery_form();
-        c2f.self_to_montgomery_form();
-        c1f = c1f * minus_b1f;
-        c2f = c2f * b2f;
-        field r2f = c1f - c2f;
-        field beta = cube_root_of_unity();
-        field r1f = input.reduce_once() - r2f * beta;
-        k1_out = r1f;
-        k2_out = -r2f;
-    }
-
     // static constexpr auto coset_generators = compute_coset_generators();
     // static constexpr std::array<field, 15> coset_generators = compute_coset_generators((1 << 30U));
 
@@ -540,12 +477,10 @@ template <class Params_> struct alignas(32) field {
         src = T;
     }
 
-    static field random_element(numeric::RNG* engine = nullptr) noexcept;
-
     static constexpr field multiplicative_generator() noexcept;
 
-    static constexpr uint256_t twice_modulus = modulus + modulus;
-    static constexpr uint256_t not_modulus = -modulus;
+    static constexpr uint256_t twice_modulus = get_modulus() + get_modulus();
+    static constexpr uint256_t not_modulus = -get_modulus();
     static constexpr uint256_t twice_not_modulus = -twice_modulus;
 
     struct wnaf_table {
@@ -612,9 +547,9 @@ template <class Params_> struct alignas(32) field {
                                                 uint64_t& result_8);
     BB_INLINE static constexpr std::array<uint64_t, WASM_NUM_LIMBS> wasm_convert(const uint64_t* data);
 #endif
-    BB_INLINE static constexpr std::pair<uint64_t, uint64_t> mul_wide(uint64_t a, uint64_t b) noexcept;
+    BB_INLINE __device__ static constexpr std::pair<uint64_t, uint64_t> mul_wide(uint64_t a, uint64_t b) noexcept;
 
-    BB_INLINE static constexpr uint64_t mac(
+    BB_INLINE __device__ static constexpr uint64_t mac(
         uint64_t a, uint64_t b, uint64_t c, uint64_t carry_in, uint64_t& carry_out) noexcept;
 
     BB_INLINE static constexpr void mac(

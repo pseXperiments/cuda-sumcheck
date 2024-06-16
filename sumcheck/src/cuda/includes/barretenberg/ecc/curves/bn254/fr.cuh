@@ -4,7 +4,7 @@
 #include <iomanip>
 #include <ostream>
 
-#include "../../fields/field.hpp"
+#include "../../fields/field.cuh"
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays)
 

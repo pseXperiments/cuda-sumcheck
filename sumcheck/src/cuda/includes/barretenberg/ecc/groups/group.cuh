@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../../common/assert.hpp"
-#include "./affine_element.hpp"
-#include "./element.hpp"
+#include "./affine_element.cuh"
+#include "./element.cuh"
 #include "./wnaf.hpp"
 #include "../../common/constexpr_utils.hpp"
 #include "../../crypto/blake3s/blake3s.hpp"
