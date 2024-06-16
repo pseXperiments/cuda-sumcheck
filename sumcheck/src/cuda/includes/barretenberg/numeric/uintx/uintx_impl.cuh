@@ -1,5 +1,5 @@
 #pragma once
-#include "./uintx.hpp"
+#include "./uintx.cuh"
 #include "../../common/assert.hpp"
 
 namespace bb::numeric {

@@ -1,7 +1,7 @@
 #pragma once
 #include "../../common/serialize.hpp"
-#include "../../ecc/curves/bn254/fq2.hpp"
-#include "../../numeric/uint256/uint256.hpp"
+#include "../../ecc/curves/bn254/fq2.cuh"
+#include "../../numeric/uint256/uint256.cuh"
 #include <cstring>
 #include <type_traits>
 #include <vector>
@@ -76,12 +76,6 @@ template <typename Fq_, typename Fr_, typename Params> class alignas(64) affine_
 
     static constexpr std::optional<affine_element> derive_from_x_coordinate(const Fq& x, bool sign_bit) noexcept;
 
-    /**
-     * @brief Samples a random point on the curve.
-     *
-     * @return A randomly chosen point on the curve
-     */
-    static affine_element random_element(numeric::RNG* engine = nullptr) noexcept;
     static constexpr affine_element hash_to_curve(const std::vector<uint8_t>& seed, uint8_t attempt_count = 0) noexcept
         requires SupportsHashToCurve<Params>;
 

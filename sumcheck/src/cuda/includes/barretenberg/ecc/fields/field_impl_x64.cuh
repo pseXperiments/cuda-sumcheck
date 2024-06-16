@@ -1,7 +1,7 @@
 #pragma once
 
 #if (BBERG_NO_ASM == 0)
-#include "./field_impl.hpp"
+#include "./field_impl.cuh"
 #include "asm_macros.hpp"
 namespace bb {
 
