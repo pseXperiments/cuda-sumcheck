@@ -11,7 +11,7 @@
  **/
 #pragma once
 
-#include "../uint256/uint256.hpp"
+#include "../uint256/uint256.cuh"
 #include "../../common/assert.hpp"
 #include "../../common/throw_or_abort.hpp"
 #include <cstdint>
@@ -166,13 +166,4 @@ template <class base_uint> inline std::ostream& operator<<(std::ostream& os, uin
     os << a.lo << ", " << a.hi << std::endl;
     return os;
 }
-
-using uint512_t = uintx<numeric::uint256_t>;
-using uint1024_t = uintx<uint512_t>;
-
 } // namespace bb::numeric
-
-#include "./uintx_impl.hpp"
-
-using bb::numeric::uint1024_t; // NOLINT
-using bb::numeric::uint512_t;  // NOLINT

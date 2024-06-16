@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../fields/field2.hpp"
-#include "./fq.hpp"
+#include "../../fields/field2.cuh"
+#include "./fq.cuh"
 
 namespace bb {
 struct Bn254Fq2Params {

@@ -1,6 +1,6 @@
 #pragma once
 #include "../bitop/get_msb.hpp"
-#include "./uint256.hpp"
+#include "./uint256.cuh"
 #include "../../common/assert.hpp"
 namespace bb::numeric {
 

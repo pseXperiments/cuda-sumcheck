@@ -1,8 +1,7 @@
 #pragma once
 #include "../../common/op_count.hpp"
 #include "../../common/thread.hpp"
-#include "./element.hpp"
-#include "element.hpp"
+#include "./element.cuh"
 #include <cstdint>
 
 // NOLINTBEGIN(readability-implicit-bool-conversion, cppcoreguidelines-avoid-c-arrays)
@@ -575,23 +574,6 @@ constexpr bool element<Fq, Fr, T>::operator==(const element& other) const noexce
     const Fq rhs_x = other.x * lhs_zz;
     const Fq rhs_y = other.y * lhs_zzz;
     return both_infinity || ((lhs_x == rhs_x) && (lhs_y == rhs_y));
-}
-
-template <class Fq, class Fr, class T>
-element<Fq, Fr, T> element<Fq, Fr, T>::random_element(numeric::RNG* engine) noexcept
-{
-    if constexpr (T::can_hash_to_curve) {
-        element result = random_coordinates_on_curve(engine);
-        result.z = Fq::random_element(engine);
-        Fq zz = result.z.sqr();
-        Fq zzz = zz * result.z;
-        result.x *= zz;
-        result.y *= zzz;
-        return result;
-    } else {
-        Fr scalar = Fr::random_element(engine);
-        return (element{ T::one_x, T::one_y, Fq::one() } * scalar);
-    }
 }
 
 template <class Fq, class Fr, class T>
@@ -1193,27 +1175,5 @@ void element<Fq, Fr, T>::batch_normalize(element* elements, const size_t num_ele
         elements[i].z = Fq::one();
     }
 }
-
-template <typename Fq, typename Fr, typename T>
-template <typename>
-element<Fq, Fr, T> element<Fq, Fr, T>::random_coordinates_on_curve(numeric::RNG* engine) noexcept
-{
-    bool found_one = false;
-    Fq yy;
-    Fq x;
-    Fq y;
-    while (!found_one) {
-        x = Fq::random_element(engine);
-        yy = x.sqr() * x + T::b;
-        if constexpr (T::has_a) {
-            yy += (x * T::a);
-        }
-        auto [found_root, y1] = yy.sqrt();
-        y = y1;
-        found_one = found_root;
-    }
-    return { x, y, Fq::one() };
-}
-
 } // namespace bb::group_elements
 // NOLINTEND(readability-implicit-bool-conversion, cppcoreguidelines-avoid-c-arrays)

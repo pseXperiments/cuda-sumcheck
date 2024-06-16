@@ -5,7 +5,7 @@
 #include "../../common/assert.hpp"
 namespace bb::numeric {
 
-constexpr std::pair<uint32_t, uint32_t> uint128_t::mul_wide(const uint32_t a, const uint32_t b)
+__device__ constexpr std::pair<uint32_t, uint32_t> uint128_t::mul_wide(const uint32_t a, const uint32_t b)
 {
     const uint32_t a_lo = a & 0xffffULL;
     const uint32_t a_hi = a >> 16ULL;
@@ -23,7 +23,7 @@ constexpr std::pair<uint32_t, uint32_t> uint128_t::mul_wide(const uint32_t a, co
 }
 
 // compute a + b + carry, returning the carry
-constexpr std::pair<uint32_t, uint32_t> uint128_t::addc(const uint32_t a, const uint32_t b, const uint32_t carry_in)
+__device__ constexpr std::pair<uint32_t, uint32_t> uint128_t::addc(const uint32_t a, const uint32_t b, const uint32_t carry_in)
 {
     const uint32_t sum = a + b;
     const auto carry_temp = static_cast<uint32_t>(sum < a);
@@ -32,12 +32,12 @@ constexpr std::pair<uint32_t, uint32_t> uint128_t::addc(const uint32_t a, const 
     return { r, carry_out };
 }
 
-constexpr uint32_t uint128_t::addc_discard_hi(const uint32_t a, const uint32_t b, const uint32_t carry_in)
+__device__ constexpr uint32_t uint128_t::addc_discard_hi(const uint32_t a, const uint32_t b, const uint32_t carry_in)
 {
     return a + b + carry_in;
 }
 
-constexpr std::pair<uint32_t, uint32_t> uint128_t::sbb(const uint32_t a, const uint32_t b, const uint32_t borrow_in)
+__device__ constexpr std::pair<uint32_t, uint32_t> uint128_t::sbb(const uint32_t a, const uint32_t b, const uint32_t borrow_in)
 {
     const uint32_t t_1 = a - (borrow_in >> 31ULL);
     const auto borrow_temp_1 = static_cast<uint32_t>(t_1 > a);
@@ -47,13 +47,13 @@ constexpr std::pair<uint32_t, uint32_t> uint128_t::sbb(const uint32_t a, const u
     return { t_2, 0ULL - (borrow_temp_1 | borrow_temp_2) };
 }
 
-constexpr uint32_t uint128_t::sbb_discard_hi(const uint32_t a, const uint32_t b, const uint32_t borrow_in)
+__device__ constexpr uint32_t uint128_t::sbb_discard_hi(const uint32_t a, const uint32_t b, const uint32_t borrow_in)
 {
     return a - b - (borrow_in >> 31ULL);
 }
 
 // {r, carry_out} = a + carry_in + b * c
-constexpr std::pair<uint32_t, uint32_t> uint128_t::mac(const uint32_t a,
+__device__ constexpr std::pair<uint32_t, uint32_t> uint128_t::mac(const uint32_t a,
                                                        const uint32_t b,
                                                        const uint32_t c,
                                                        const uint32_t carry_in)
@@ -67,7 +67,7 @@ constexpr std::pair<uint32_t, uint32_t> uint128_t::mac(const uint32_t a,
     return result;
 }
 
-constexpr uint32_t uint128_t::mac_discard_hi(const uint32_t a,
+__device__ constexpr uint32_t uint128_t::mac_discard_hi(const uint32_t a,
                                              const uint32_t b,
                                              const uint32_t c,
                                              const uint32_t carry_in)
@@ -75,7 +75,7 @@ constexpr uint32_t uint128_t::mac_discard_hi(const uint32_t a,
     return (b * c + a + carry_in);
 }
 
-constexpr std::pair<uint128_t, uint128_t> uint128_t::divmod(const uint128_t& b) const
+__device__ constexpr std::pair<uint128_t, uint128_t> uint128_t::divmod(const uint128_t& b) const
 {
     if (*this == 0 || b == 0) {
         return { 0, 0 };
@@ -123,7 +123,7 @@ constexpr std::pair<uint128_t, uint128_t> uint128_t::divmod(const uint128_t& b) 
     return { quotient, remainder };
 }
 
-constexpr std::pair<uint128_t, uint128_t> uint128_t::mul_extended(const uint128_t& other) const
+__device__ constexpr std::pair<uint128_t, uint128_t> uint128_t::mul_extended(const uint128_t& other) const
 {
     const auto [r0, t0] = mul_wide(data[0], other.data[0]);
     const auto [q0, t1] = mac(t0, data[0], other.data[1], 0);

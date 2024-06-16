@@ -3,13 +3,13 @@
 #include <array>
 #include <cstdint>
 
-#include "./field_impl.hpp"
+#include "./field_impl.cuh"
 #include "../../common/op_count.hpp"
 
 namespace bb {
     using namespace numeric;
 // NOLINTBEGIN(readability-implicit-bool-conversion)
-template <class T> constexpr std::pair<uint64_t, uint64_t> field<T>::mul_wide(uint64_t a, uint64_t b) noexcept
+template <class T> __device__ constexpr std::pair<uint64_t, uint64_t> field<T>::mul_wide(uint64_t a, uint64_t b) noexcept
 {
 #if defined(__SIZEOF_INT128__) && !defined(__wasm__)
     const uint128_t res = (static_cast<uint128_t>(a) * static_cast<uint128_t>(b));
@@ -20,7 +20,7 @@ template <class T> constexpr std::pair<uint64_t, uint64_t> field<T>::mul_wide(ui
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::mac(
     const uint64_t a, const uint64_t b, const uint64_t c, const uint64_t carry_in, uint64_t& carry_out) noexcept
 {
@@ -36,7 +36,7 @@ constexpr uint64_t field<T>::mac(
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr void field<T>::mac(const uint64_t a,
                              const uint64_t b,
                              const uint64_t c,
@@ -56,7 +56,7 @@ constexpr void field<T>::mac(const uint64_t a,
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::mac_mini(const uint64_t a,
                                       const uint64_t b,
                                       const uint64_t c,
@@ -73,7 +73,7 @@ constexpr uint64_t field<T>::mac_mini(const uint64_t a,
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr void field<T>::mac_mini(
     const uint64_t a, const uint64_t b, const uint64_t c, uint64_t& out, uint64_t& carry_out) noexcept
 {
@@ -88,7 +88,7 @@ constexpr void field<T>::mac_mini(
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::mac_discard_lo(const uint64_t a, const uint64_t b, const uint64_t c) noexcept
 {
 #if defined(__SIZEOF_INT128__) && !defined(__wasm__)
@@ -99,7 +99,7 @@ constexpr uint64_t field<T>::mac_discard_lo(const uint64_t a, const uint64_t b, 
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::addc(const uint64_t a,
                                   const uint64_t b,
                                   const uint64_t carry_in,
@@ -119,7 +119,7 @@ constexpr uint64_t field<T>::addc(const uint64_t a,
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::sbb(const uint64_t a,
                                  const uint64_t b,
                                  const uint64_t borrow_in,
@@ -139,7 +139,7 @@ constexpr uint64_t field<T>::sbb(const uint64_t a,
 #endif
 }
 
-template <class T>
+template <class T> __device__
 constexpr uint64_t field<T>::square_accumulate(const uint64_t a,
                                                const uint64_t b,
                                                const uint64_t c,
@@ -177,8 +177,9 @@ constexpr uint64_t field<T>::square_accumulate(const uint64_t a,
 #endif
 }
 
-template <class T> constexpr field<T> field<T>::reduce() const noexcept
+template <class T> __device__ constexpr field<T> field<T>::reduce() const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         uint256_t val{ data[0], data[1], data[2], data[3] };
         if (val >= modulus) {
@@ -202,7 +203,7 @@ template <class T> constexpr field<T> field<T>::reduce() const noexcept
     };
 }
 
-template <class T> constexpr field<T> field<T>::add(const field& other) const noexcept
+template <class T> __device__ constexpr field<T> field<T>::add(const field& other) const noexcept
 {
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         uint64_t r0 = data[0] + other.data[0];
@@ -251,7 +252,7 @@ template <class T> constexpr field<T> field<T>::add(const field& other) const no
     }
 }
 
-template <class T> constexpr field<T> field<T>::subtract(const field& other) const noexcept
+template <class T> __device__ constexpr field<T> field<T>::subtract(const field& other) const noexcept
 {
     uint64_t borrow = 0;
     uint64_t r0 = sbb(data[0], other.data[0], borrow, borrow);
@@ -283,8 +284,9 @@ template <class T> constexpr field<T> field<T>::subtract(const field& other) con
  * @param other
  * @return constexpr field<T>
  */
-template <class T> constexpr field<T> field<T>::subtract_coarse(const field& other) const noexcept
+template <class T> __device__ constexpr field<T> field<T>::subtract_coarse(const field& other) const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         return subtract(other);
     }
@@ -309,8 +311,9 @@ template <class T> constexpr field<T> field<T>::subtract_coarse(const field& oth
  * @details Explanation of Montgomery form can be found in \ref field_docs_montgomery_explainer and the difference
  * between WASM and generic versions is explained in \ref field_docs_architecture_details
  */
-template <class T> constexpr field<T> field<T>::montgomery_mul_big(const field& other) const noexcept
+template <class T> __device__ constexpr field<T> field<T>::montgomery_mul_big(const field& other) const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
 #if defined(__SIZEOF_INT128__) && !defined(__wasm__)
     uint64_t c = 0;
     uint64_t t0 = 0;
@@ -531,8 +534,9 @@ template <class T> constexpr std::array<uint64_t, WASM_NUM_LIMBS> field<T>::wasm
              (data[3] >> 40) & 0x1fffffff };
 }
 #endif
-template <class T> constexpr field<T> field<T>::montgomery_mul(const field& other) const noexcept
+template <class T> __device__ constexpr field<T> field<T>::montgomery_mul(const field& other) const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         return montgomery_mul_big(other);
     }
@@ -653,6 +657,7 @@ template <class T> constexpr field<T> field<T>::montgomery_mul(const field& othe
 
 template <class T> constexpr field<T> field<T>::montgomery_square() const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         return montgomery_mul_big(*this);
     }
