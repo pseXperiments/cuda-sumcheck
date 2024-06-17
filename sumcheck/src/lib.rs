@@ -4,6 +4,7 @@ use cudarc::driver::{CudaDevice, LaunchConfig, DeviceRepr, DriverError, LaunchAs
 use cudarc::nvrtc::Ptx;
 use ff::{Field, PrimeField};
 use halo2curves::bn256::Fr;
+use itertools::Itertools;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -14,6 +15,19 @@ unsafe impl DeviceRepr for FieldBinding {}
 impl Default for FieldBinding {
     fn default() -> Self {
         Self{ data: [0; 4] }
+    }
+}
+
+impl<F: PrimeField> From<F> for FieldBinding {
+    fn from(value: F) -> Self {
+        let repr = value.to_repr();
+        let bytes = repr.as_ref();
+        let data = bytes.chunks(8).map(|bytes| {
+            u64::from_le_bytes(bytes.try_into().unwrap())
+        }).collect_vec();
+        FieldBinding {
+            data: data.try_into().unwrap()
+        }
     }
 }
 
