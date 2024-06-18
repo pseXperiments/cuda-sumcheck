@@ -1,9 +1,20 @@
 #include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
 
-extern "C" __global__ void mul(bb::fr* elems, bb::fr* results) {
-    elems[0].self_to_montgomery_form();
-    elems[1].self_to_montgomery_form();
-    bb::fr temp = elems[0] * elems[1];
-    results[threadIdx.x] = temp.from_montgomery_form();
+using namespace bb;
+
+extern "C" __global__ void evaluate(fr* coeffs, fr* point, uint8_t num_vars, fr* monomial_evals) {
+    fr coeff = coeffs[threadIdx.x].to_montgomery_form();
+    if (coeff == fr::zero()) {
+        monomial_evals[threadIdx.x] = fr::zero();
+    } else {
+        monomial_evals[threadIdx.x] = coeff;
+        for (int i = 0; i < num_vars; i++) {
+            if (((threadIdx.x >> i) & 1) == 1) {
+                point[i].self_to_montgomery_form();
+                monomial_evals[threadIdx.x] *= point[i];
+            }
+        }
+        monomial_evals[threadIdx.x].self_from_montgomery_form();
+    }
     return;
 }
