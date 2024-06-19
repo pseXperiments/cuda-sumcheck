@@ -78,6 +78,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
         println!("Time taken to call kernel: {:.2?}", now.elapsed());
 
+        // TODO : Calculate the sum in GPU side rather than copying the monomial evaluation results
         let monomial_evals = gpu.sync_reclaim(monomial_evals)?;
 
         let result = monomial_evals
