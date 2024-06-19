@@ -48,9 +48,9 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
         println!("Time taken to compile and load PTX: {:.2?}", now.elapsed());
 
-        let point = point
+        let point_montgomery = point
             .into_iter()
-            .map(|f| F::to_canonical_form(*f))
+            .map(|f| F::to_montgomery_form(*f))
             .collect_vec();
 
         // copy to GPU
@@ -60,7 +60,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 .map(|&coeff| F::to_canonical_form(coeff))
                 .collect_vec(),
         )?;
-        let gpu_eval_point = gpu.htod_copy(point)?;
+        let gpu_eval_point = gpu.htod_copy(point_montgomery)?;
         let monomial_evals = gpu.htod_copy(vec![FieldBinding::default(); 1 << num_vars])?;
 
         println!("Time taken to initialise data: {:.2?}", now.elapsed());
@@ -82,7 +82,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
         let result = monomial_evals
             .into_iter()
-            .map(|eval| F::from_canonical_form(eval))
+            .map(|eval| F::from_montgomery_form(eval))
             .sum::<F>();
         Ok(result)
     }
@@ -125,14 +125,20 @@ mod tests {
 
     #[test]
     fn test_evaluate_poly() -> Result<(), DriverError> {
-        let num_vars = 6;
+        let num_vars = 20;
         let rng = OsRng::default();
         let poly_coeffs = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
         let gpu_api_wrapper = GPUApiWrapper::<Fr>::default();
+        let now = Instant::now();
         let eval_poly_result_by_cpu = evaluate_poly_cpu(&poly_coeffs, &point, num_vars);
+        println!("Time taken to evaluate on cpu: {:.2?}", now.elapsed());
+
+        let now = Instant::now();
         let eval_poly_result_by_gpu =
             gpu_api_wrapper.evaluate_poly(num_vars, &poly_coeffs, &point)?;
+        println!("Time taken to evaluate on gpu: {:.2?}", now.elapsed());
+
         assert_eq!(eval_poly_result_by_cpu, eval_poly_result_by_gpu);
         Ok(())
     }
