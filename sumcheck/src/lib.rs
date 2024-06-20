@@ -78,13 +78,17 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
         println!("Time taken to call kernel: {:.2?}", now.elapsed());
 
+        let now = Instant::now();
         // TODO : Calculate the sum in GPU side rather than copying the monomial evaluation results
         let monomial_evals = gpu.sync_reclaim(monomial_evals)?;
+        println!("Time taken to synchronize: {:.2?}", now.elapsed());
 
+        let now = Instant::now();
         let result = monomial_evals
             .into_iter()
             .map(|eval| F::from_montgomery_form(eval))
             .sum::<F>();
+        println!("Time taken to calculate sum: {:.2?}", now.elapsed());
         Ok(result)
     }
 }
