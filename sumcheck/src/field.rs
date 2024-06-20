@@ -48,7 +48,7 @@ macro_rules! field_binding_conversion {
 
             fn to_montgomery_form(f: $field) -> FieldBinding {
                 let mut buf = vec![];
-                f.write_raw(&mut buf);
+                f.write_raw(&mut buf).unwrap();
                 let data = buf
                     .chunks(8)
                     .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
