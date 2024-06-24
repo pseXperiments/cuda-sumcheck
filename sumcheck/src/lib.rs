@@ -4,6 +4,7 @@ use ff::{Field, PrimeField};
 use field::{FromFieldBinding, ToFieldBinding};
 use halo2curves::bn256::Fr;
 use itertools::Itertools;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::marker::PhantomData;
 use std::process::Output;
 use std::time::Instant;
@@ -44,7 +45,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         let now = Instant::now();
 
         let ptx = Ptx::from_src(CUDA_KERNEL_MY_STRUCT);
-        gpu.load_ptx(ptx, "multilinear", &["evaluate"])?;
+        gpu.load_ptx(ptx, "multilinear", &["evaluate", "evaluate_optimized"])?;
 
         println!("Time taken to compile and load PTX: {:.2?}", now.elapsed());
 
@@ -56,36 +57,38 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         // copy to GPU
         let gpu_coeffs = gpu.htod_copy(
             poly_coeffs
-                .into_iter()
+                .into_par_iter()
                 .map(|&coeff| F::to_canonical_form(coeff))
-                .collect_vec(),
+                .collect()
         )?;
         let gpu_eval_point = gpu.htod_copy(point_montgomery)?;
         let monomial_evals = gpu.htod_copy(vec![FieldBinding::default(); 1 << num_vars])?;
+        let mutex = unsafe { gpu.alloc_zeros::<u32>(1)? };
+        let result = gpu.htod_copy(vec![FieldBinding::default(); 1])?;
 
         println!("Time taken to initialise data: {:.2?}", now.elapsed());
 
         let now = Instant::now();
 
-        let f = gpu.get_func("multilinear", "evaluate").unwrap();
+        let evaluate_optimized = gpu.get_func("multilinear", "evaluate_optimized").unwrap();
 
         unsafe {
-            f.launch(
+            evaluate_optimized.launch(
                 LaunchConfig::for_num_elems(1 << num_vars as u32),
-                (&gpu_coeffs, &gpu_eval_point, num_vars, &monomial_evals),
-            )
-        }?;
+                (&gpu_coeffs, &gpu_eval_point, num_vars, &monomial_evals, &result, &mutex),
+            )?;
+        };
 
         println!("Time taken to call kernel: {:.2?}", now.elapsed());
 
         let now = Instant::now();
-        // TODO : Calculate the sum in GPU side rather than copying the monomial evaluation results
         let monomial_evals = gpu.sync_reclaim(monomial_evals)?;
         println!("Time taken to synchronize: {:.2?}", now.elapsed());
 
         let now = Instant::now();
         let result = monomial_evals
             .into_iter()
+            .step_by(1024)
             .map(|eval| F::from_montgomery_form(eval))
             .sum::<F>();
         println!("Time taken to calculate sum: {:.2?}", now.elapsed());
@@ -130,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_poly() -> Result<(), DriverError> {
-        let num_vars = 20;
+        let num_vars = 16;
         let rng = OsRng::default();
         let poly_coeffs = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();

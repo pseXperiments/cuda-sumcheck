@@ -180,6 +180,7 @@ constexpr uint64_t field<T>::square_accumulate(const uint64_t a,
 template <class T> __device__ constexpr field<T> field<T>::reduce() const noexcept
 {
     constexpr uint256_t modulus = get_modulus();
+    constexpr uint256_t not_modulus = -modulus;
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         uint256_t val{ data[0], data[1], data[2], data[3] };
         if (val >= modulus) {
@@ -205,6 +206,8 @@ template <class T> __device__ constexpr field<T> field<T>::reduce() const noexce
 
 template <class T> __device__ constexpr field<T> field<T>::add(const field& other) const noexcept
 {
+    constexpr uint256_t modulus = get_modulus();
+    constexpr uint256_t twice_not_modulus = get_twice_not_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         uint64_t r0 = data[0] + other.data[0];
         uint64_t c = r0 < data[0];
@@ -287,6 +290,7 @@ template <class T> __device__ constexpr field<T> field<T>::subtract(const field&
 template <class T> __device__ constexpr field<T> field<T>::subtract_coarse(const field& other) const noexcept
 {
     constexpr uint256_t modulus = get_modulus();
+    constexpr uint256_t twice_modulus = get_twice_modulus();
     if constexpr (modulus.data[3] >= 0x4000000000000000ULL) {
         return subtract(other);
     }
