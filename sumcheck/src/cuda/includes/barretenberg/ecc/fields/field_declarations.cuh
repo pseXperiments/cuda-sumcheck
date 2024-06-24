@@ -166,6 +166,19 @@ template <class Params_> struct alignas(32) field {
     static constexpr __device__ uint256_t get_modulus() {
         return uint256_t{ Params::modulus_0, Params::modulus_1, Params::modulus_2, Params::modulus_3 };
     }
+    static constexpr __device__ uint256_t get_not_modulus() {
+        constexpr uint256_t modulus = get_modulus();
+        return -modulus;
+    }
+
+    static constexpr __device__ uint256_t get_twice_modulus() {
+        constexpr uint256_t modulus = get_modulus();
+        return modulus + modulus;
+    }
+    static constexpr __device__ uint256_t get_twice_not_modulus() {
+        constexpr uint256_t twice_modulus = get_twice_modulus();
+        return -twice_modulus;
+    }
 #if defined(__SIZEOF_INT128__) && !defined(__wasm__)
     static constexpr uint256_t r_squared_uint{
         Params_::r_squared_0, Params_::r_squared_1, Params_::r_squared_2, Params_::r_squared_3
@@ -478,10 +491,6 @@ template <class Params_> struct alignas(32) field {
     }
 
     static constexpr field multiplicative_generator() noexcept;
-
-    static constexpr uint256_t twice_modulus = get_modulus() + get_modulus();
-    static constexpr uint256_t not_modulus = -get_modulus();
-    static constexpr uint256_t twice_not_modulus = -twice_modulus;
 
     struct wnaf_table {
         uint8_t windows[64]; // NOLINT

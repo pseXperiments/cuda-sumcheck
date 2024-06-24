@@ -207,6 +207,7 @@ template <class T> __device__ constexpr void field<T>::self_neg() noexcept
 {
     BB_OP_COUNT_TRACK_NAME("fr::self_neg");
     constexpr uint256_t modulus = get_modulus();
+    constexpr uint256_t twice_modulus = get_twice_modulus();
     if constexpr ((T::modulus_3 >= 0x4000000000000000ULL) ||
                   (T::modulus_1 == 0 && T::modulus_2 == 0 && T::modulus_3 == 0)) {
         constexpr field p{ modulus.data[0], modulus.data[1], modulus.data[2], modulus.data[3] };
