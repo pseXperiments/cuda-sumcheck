@@ -1,12 +1,10 @@
 use cudarc::driver::{CudaDevice, DeviceRepr, DriverError, LaunchAsync, LaunchConfig};
 use cudarc::nvrtc::Ptx;
-use ff::{Field, PrimeField};
+use ff::PrimeField;
 use field::{FromFieldBinding, ToFieldBinding};
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::marker::PhantomData;
-use std::process::Output;
 use std::time::Instant;
 
 pub mod field;
@@ -21,7 +19,7 @@ impl Default for FieldBinding {
 }
 
 // include the compiled PTX code as string
-const CUDA_KERNEL_MY_STRUCT: &str = include_str!(concat!(env!("OUT_DIR"), "/multilinear.ptx"));
+const MULTILINEAR_POLY_KERNEL: &str = include_str!(concat!(env!("OUT_DIR"), "/multilinear.ptx"));
 
 /// Wrapper struct for APIs using GPU
 #[derive(Default)]
@@ -44,11 +42,12 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         // compile ptx
         let now = Instant::now();
 
-        let ptx = Ptx::from_src(CUDA_KERNEL_MY_STRUCT);
+        let ptx = Ptx::from_src(MULTILINEAR_POLY_KERNEL);
         gpu.load_ptx(ptx, "multilinear", &["evaluate", "evaluate_optimized"])?;
 
         println!("Time taken to compile and load PTX: {:.2?}", now.elapsed());
 
+        let now = Instant::now();
         let point_montgomery = point
             .into_iter()
             .map(|f| F::to_montgomery_form(*f))
@@ -59,11 +58,11 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             poly_coeffs
                 .into_par_iter()
                 .map(|&coeff| F::to_canonical_form(coeff))
-                .collect()
+                .collect(),
         )?;
         let gpu_eval_point = gpu.htod_copy(point_montgomery)?;
         let monomial_evals = gpu.htod_copy(vec![FieldBinding::default(); 1 << num_vars])?;
-        let mutex = unsafe { gpu.alloc_zeros::<u32>(1)? };
+        let mutex = gpu.alloc_zeros::<u32>(1)?;
         let result = gpu.htod_copy(vec![FieldBinding::default(); 1])?;
 
         println!("Time taken to initialise data: {:.2?}", now.elapsed());
@@ -75,7 +74,14 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         unsafe {
             evaluate_optimized.launch(
                 LaunchConfig::for_num_elems(1 << num_vars as u32),
-                (&gpu_coeffs, &gpu_eval_point, num_vars, &monomial_evals, &result, &mutex),
+                (
+                    &gpu_coeffs,
+                    &gpu_eval_point,
+                    num_vars,
+                    &monomial_evals,
+                    &result,
+                    &mutex,
+                ),
             )?;
         };
 
@@ -89,7 +95,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         let result = monomial_evals
             .into_iter()
             .step_by(1024)
-            .map(|eval| F::from_montgomery_form(eval))
+            .map(|eval| F::from_canonical_form(eval))
             .sum::<F>();
         println!("Time taken to calculate sum: {:.2?}", now.elapsed());
         Ok(result)
@@ -98,7 +104,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::{default, fmt::Error, time::Instant};
+    use std::{cmp::Ordering, default, fmt::Error, time::Instant};
 
     use cudarc::{
         driver::{CudaDevice, DriverError, LaunchAsync, LaunchConfig},
@@ -110,7 +116,9 @@ mod tests {
     use rand::rngs::OsRng;
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-    use super::{FieldBinding, GPUApiWrapper, CUDA_KERNEL_MY_STRUCT};
+    use crate::{field::{FromFieldBinding, ToFieldBinding}, FieldBinding, MULTILINEAR_POLY_KERNEL};
+
+    use super::GPUApiWrapper;
 
     fn evaluate_poly_cpu<F: Field>(poly_coeffs: &[F], point: &[F], num_vars: usize) -> F {
         poly_coeffs
@@ -133,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_poly() -> Result<(), DriverError> {
-        let num_vars = 16;
+        let num_vars = 22;
         let rng = OsRng::default();
         let poly_coeffs = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
