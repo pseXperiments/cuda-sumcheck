@@ -19,7 +19,7 @@ extern "C" __global__ void evaluate(fr* coeffs, fr* point, uint8_t num_vars, fr*
     return;
 }
 
-extern "C" __global__ void evaluate_optimized(fr* coeffs, fr* point, uint8_t num_vars, fr* monomial_evals, fr* result, int* mutex) {
+extern "C" __global__ void evaluate_optimized(fr* coeffs, fr* point, uint8_t num_vars, fr* monomial_evals) {
     const int tid = threadIdx.x;
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
