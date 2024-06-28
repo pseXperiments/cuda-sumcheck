@@ -10,6 +10,7 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever files of interest changes.
     println!("cargo:rerun-if-changed=src/cuda/kernels/multilinear.cu");
     println!("cargo:rerun-if-changed=src/cuda/kernels/sumcheck.cu");
+    println!("cargo:rerun-if-changed=src/cuda/kernels/scalar_multiplication.cu");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
@@ -20,27 +21,33 @@ fn main() {
     let language_std = "c++20"; // Language standard in which device functions are written
 
     // build the cuda kernels
-    let cuda_src = PathBuf::from("src/cuda/kernels/multilinear.cu");
-    let ptx_file = out_dir.join("multilinear.ptx");
+    let cuda_src = [
+        "src/cuda/kernels/multilinear.cu",
+        "src/cuda/kernels/scalar_multiplication.cu",
+    ]
+    .map(|path| PathBuf::from(path));
+    let ptx_file = ["multilinear.ptx", "scalar_multiplication.ptx"].map(|file| out_dir.join(file));
 
-    let nvcc_status = Command::new("nvcc")
-        .arg("-ptx")
-        .arg("-o")
-        .arg(&ptx_file)
-        .arg(&cuda_src)
-        .arg(format!("-arch={}", arch))
-        .arg(format!("-code={}", code))
-        .arg(format!("-ccbin={}", compiler))
-        .arg(format!("-std={}", language_std))
-        .arg("-allow-unsupported-compiler") // workaround to use clang-16 compiler with nvcc
-        .arg("--expt-relaxed-constexpr")
-        .status()
-        .unwrap();
+    for (cuda_src, ptx_file) in cuda_src.into_iter().zip(ptx_file) {
+        let nvcc_status = Command::new("nvcc")
+            .arg("-ptx")
+            .arg("-o")
+            .arg(&ptx_file)
+            .arg(&cuda_src)
+            .arg(format!("-arch={}", arch))
+            .arg(format!("-code={}", code))
+            .arg(format!("-ccbin={}", compiler))
+            .arg(format!("-std={}", language_std))
+            .arg("-allow-unsupported-compiler") // workaround to use clang-16 compiler with nvcc
+            .arg("--expt-relaxed-constexpr")
+            .status()
+            .unwrap();
 
-    assert!(
-        nvcc_status.success(),
-        "Failed to compile CUDA source to PTX."
-    );
+        assert!(
+            nvcc_status.success(),
+            "Failed to compile CUDA source to PTX."
+        );
+    }
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
