@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
 
+mod cpu;
 pub mod field;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
@@ -59,7 +60,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(())
     }
 
-    pub fn evaluate_poly(
+    pub fn eval_by_coeff(
         &self,
         num_vars: usize,
         poly_coeffs: &[F],
@@ -125,7 +126,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         unsafe {
             mul.launch(
                 LaunchConfig::for_num_elems(1 as u32),
-                (&gpu_values, &results)
+                (&gpu_values, &results),
             )?;
         }
         println!("Time taken to call kernel: {:.2?}", now.elapsed());
@@ -148,11 +149,15 @@ mod tests {
     use rand::rngs::OsRng;
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-    use crate::{MULTILINEAR_POLY_KERNEL, SCALAR_MULTIPLICATION_KERNEL};
+    use crate::{cpu, MULTILINEAR_POLY_KERNEL, SCALAR_MULTIPLICATION_KERNEL};
 
     use super::GPUApiWrapper;
 
-    fn evaluate_poly_cpu<F: PrimeField>(poly_coeffs: &[F], point: &[F], num_vars: usize) -> F {
+    fn eval_cpu<F: PrimeField>(evals: &[F], x: &[F]) -> F {
+        cpu::multilinear::evaluate(evals, x)
+    }
+
+    fn eval_by_coeff_cpu<F: PrimeField>(poly_coeffs: &[F], point: &[F], num_vars: usize) -> F {
         poly_coeffs
             .par_iter()
             .enumerate()
@@ -172,7 +177,12 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_poly() -> Result<(), DriverError> {
+    fn test_eval() -> Result<(), DriverError> {
+        todo!()
+    }
+
+    #[test]
+    fn test_eval_by_coeff() -> Result<(), DriverError> {
         let num_vars = 18;
         let rng = OsRng::default();
         let poly_coeffs = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
@@ -186,12 +196,12 @@ mod tests {
         )?;
 
         let now = Instant::now();
-        let eval_poly_result_by_cpu = evaluate_poly_cpu(&poly_coeffs, &point, num_vars);
+        let eval_poly_result_by_cpu = eval_by_coeff_cpu(&poly_coeffs, &point, num_vars);
         println!("Time taken to evaluate on cpu: {:.2?}", now.elapsed());
 
         let now = Instant::now();
         let eval_poly_result_by_gpu =
-            gpu_api_wrapper.evaluate_poly(num_vars, &poly_coeffs, &point)?;
+            gpu_api_wrapper.eval_by_coeff(num_vars, &poly_coeffs, &point)?;
         println!("Time taken to evaluate on gpu: {:.2?}", now.elapsed());
 
         assert_eq!(eval_poly_result_by_cpu, eval_poly_result_by_gpu);
