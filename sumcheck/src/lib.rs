@@ -60,6 +60,44 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(())
     }
 
+    pub fn eval(&self, num_vars: usize, evals: &[F], point: &[F]) -> Result<F, DriverError> {
+        let now = Instant::now();
+        let point = point
+            .into_iter()
+            .map(|f| F::to_montgomery_form(*f))
+            .collect_vec();
+
+        // copy to GPU
+        let evals = self.gpu.htod_copy(
+            evals
+                .into_par_iter()
+                .map(|&eval| F::to_montgomery_form(eval))
+                .collect(),
+        )?;
+        let gpu_eval_point = self.gpu.htod_copy(point)?;
+        let buf = self
+            .gpu
+            .htod_copy(vec![FieldBinding::default(); 1 << (num_vars - 1)])?;
+        println!("Time taken to initialise data: {:.2?}", now.elapsed());
+
+        let now = Instant::now();
+        let eval = self.gpu.get_func("multilinear", "eval").unwrap();
+
+        unsafe {
+            eval.launch(
+                LaunchConfig::for_num_elems(1 << (num_vars - 1) as u32),
+                (&evals, &gpu_eval_point, num_vars, &buf),
+            )?;
+        };
+        println!("Time taken to call kernel: {:.2?}", now.elapsed());
+
+        let now = Instant::now();
+        let buf = self.gpu.sync_reclaim(buf)?;
+        println!("Time taken to synchronize: {:.2?}", now.elapsed());
+
+        Ok(F::from_canonical_form(buf[0]))
+    }
+
     pub fn eval_by_coeff(
         &self,
         num_vars: usize,
@@ -86,13 +124,10 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         println!("Time taken to initialise data: {:.2?}", now.elapsed());
 
         let now = Instant::now();
-        let evaluate_optimized = self
-            .gpu
-            .get_func("multilinear", "evaluate_optimized")
-            .unwrap();
+        let eval_by_coeff = self.gpu.get_func("multilinear", "eval_by_coeff").unwrap();
 
         unsafe {
-            evaluate_optimized.launch(
+            eval_by_coeff.launch(
                 LaunchConfig::for_num_elems(1 << num_vars as u32),
                 (&gpu_coeffs, &gpu_eval_point, num_vars, &monomial_evals),
             )?;
@@ -153,10 +188,6 @@ mod tests {
 
     use super::GPUApiWrapper;
 
-    fn eval_cpu<F: PrimeField>(evals: &[F], x: &[F]) -> F {
-        cpu::multilinear::evaluate(evals, x)
-    }
-
     fn eval_by_coeff_cpu<F: PrimeField>(poly_coeffs: &[F], point: &[F], num_vars: usize) -> F {
         poly_coeffs
             .par_iter()
@@ -178,7 +209,24 @@ mod tests {
 
     #[test]
     fn test_eval() -> Result<(), DriverError> {
-        todo!()
+        let num_vars = 10;
+        let rng = OsRng::default();
+        let evals = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
+        let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
+
+        let gpu_api_wrapper = GPUApiWrapper::<Fr>::setup()?;
+        gpu_api_wrapper.load_ptx(MULTILINEAR_POLY_KERNEL, "multilinear", &["eval"])?;
+
+        let now = Instant::now();
+        let eval_poly_result_by_cpu = cpu::multilinear::evaluate(&evals, &point);
+        println!("Time taken to evaluate on cpu: {:.2?}", now.elapsed());
+
+        let now = Instant::now();
+        let eval_poly_result_by_gpu = gpu_api_wrapper.eval(num_vars, &evals, &point)?;
+        println!("Time taken to evaluate on gpu: {:.2?}", now.elapsed());
+
+        assert_eq!(eval_poly_result_by_cpu, eval_poly_result_by_gpu);
+        Ok(())
     }
 
     #[test]
@@ -189,11 +237,7 @@ mod tests {
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
 
         let gpu_api_wrapper = GPUApiWrapper::<Fr>::setup()?;
-        gpu_api_wrapper.load_ptx(
-            MULTILINEAR_POLY_KERNEL,
-            "multilinear",
-            &["evaluate_optimized"],
-        )?;
+        gpu_api_wrapper.load_ptx(MULTILINEAR_POLY_KERNEL, "multilinear", &["eval_by_coeff"])?;
 
         let now = Instant::now();
         let eval_poly_result_by_cpu = eval_by_coeff_cpu(&poly_coeffs, &point, num_vars);
