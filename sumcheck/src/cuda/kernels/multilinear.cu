@@ -40,23 +40,38 @@ extern "C" __global__ void eval_by_coeff(fr* coeffs, fr* point, uint8_t num_vars
     }
 }
 
-extern "C" __global__ void eval(fr* evals, fr* point, uint8_t num_vars, fr* buf) {
+__device__ fr merge(fr* evals, fr* point, uint8_t point_index, u_int32_t chunk_size) {
+    const int start = chunk_size * (blockIdx.x * blockDim.x + threadIdx.x);
+    auto step = 2;
+    while (chunk_size > 1) {
+        for (int i = 0; i < chunk_size / 2; i++) {
+            auto fst = start + step * i;
+            auto snd = fst + step / 2;
+            evals[fst] = point[point_index] * (evals[snd] - evals[fst]) + evals[fst];
+        }
+        chunk_size >>= 1;
+        step <<= 1;
+        point_index++;
+    }
+    return evals[start];
+}
+
+extern "C" __global__ void eval(fr* evals, fr* buf, fr* point, u_int32_t size, u_int32_t chunk_size, uint8_t offset) {
     const int tid = threadIdx.x;
-    auto i = 0;
-    auto num_threads = 1 << (num_vars - 1);
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint8_t log2_chunk_size = log2(chunk_size);
+    u_int32_t num_threads = ceil(size / chunk_size);
+    auto i = offset;
     while (num_threads > 0) {
         if (tid < num_threads) {
-            buf[tid] = point[i] * (evals[2 * tid + 1] - evals[2 * tid]) + evals[2 * tid];
+            buf[idx] = merge(evals, point, i, chunk_size);
         }
         __syncthreads();
         if (tid == 0) {
-            memcpy(evals, buf, num_threads * 32);
+            memcpy(&evals[chunk_size * blockIdx.x * blockDim.x], &buf[blockIdx.x * blockDim.x], num_threads * 32);
         }
-        i++;
-        num_threads >>= 1;
+        i += log2_chunk_size;
+        num_threads >>= log2_chunk_size;
         __syncthreads();
-    }
-    if (tid == 0) {
-        buf[0].self_from_montgomery_form();
     }
 }
