@@ -1,8 +1,10 @@
 CARGO = cargo
 
-all: build doc
+all: build
 
 build:
+	git submodule init
+	git submodule update
 	@$(CARGO) build --release
 
 doc:
