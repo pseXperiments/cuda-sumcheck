@@ -75,3 +75,10 @@ extern "C" __global__ void eval(fr* evals, fr* buf, fr* point, u_int32_t size, u
         __syncthreads();
     }
 }
+
+extern "C" __global__ void convert_to_montgomery(fr* evals, u_int32_t size, u_int32_t chunk_size) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    for (int i = 0; i < chunk_size; i++) {
+        evals[chunk_size * idx + i].self_to_montgomery_form();
+    }
+}

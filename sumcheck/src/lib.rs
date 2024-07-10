@@ -1,7 +1,7 @@
 // silence warnings due to bindgen
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
-use cudarc::driver::{CudaDevice, DeviceRepr, DriverError, LaunchAsync, LaunchConfig};
+use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, DriverError, LaunchAsync, LaunchConfig};
 use cudarc::nvrtc::Ptx;
 use ff::PrimeField;
 use field::{FromFieldBinding, ToFieldBinding};
@@ -60,6 +60,36 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(())
     }
 
+    pub fn convert_to_montgomery(
+        &self,
+        values: &[F],
+        size: usize,
+        chunk_size: usize,
+    ) -> Result<CudaSlice<FieldBinding>, DriverError> {
+        let now = Instant::now();
+        let values = self.gpu.htod_copy(
+            values
+                .into_par_iter()
+                .map(|&eval| F::to_canonical_form(eval))
+                .collect(),
+        )?;
+        println!("Time taken to initialise data: {:.2?}", now.elapsed());
+        let now = Instant::now();
+        let convert_to_montgomery = self
+            .gpu
+            .get_func("multilinear", "convert_to_montgomery")
+            .unwrap();
+        unsafe {
+            convert_to_montgomery.launch(
+                LaunchConfig::for_num_elems((size / chunk_size) as u32),
+                (&values, size, chunk_size),
+            )?;
+        };
+        println!("Time taken to call kernel: {:.2?}", now.elapsed());
+        self.gpu.synchronize()?;
+        Ok(values)
+    }
+
     pub fn eval(&self, num_vars: usize, evals: &[F], point: &[F]) -> Result<F, DriverError> {
         let now = Instant::now();
         let point = point
@@ -68,24 +98,22 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             .collect_vec();
 
         // copy to GPU
-        let mut evals = self.gpu.htod_copy(
-            evals
-                .into_par_iter()
-                .map(|&eval| F::to_montgomery_form(eval))
-                .collect(),
-        )?;
         let gpu_eval_point = self.gpu.htod_copy(point)?;
+        let mut evals = self.convert_to_montgomery(evals, 1 << num_vars, 1 << 5)?;
 
         let mut num_vars = num_vars;
         let mut results = vec![];
         let mut offset = 0;
         while num_vars > 0 {
-            let log2_chunk_size = 1;
+            let log2_chunk_size = 2;
             let chunk_size = 1 << log2_chunk_size;
             let (data_size_per_block, block_num) = if num_vars < 10 + log2_chunk_size {
                 (1 << num_vars, 1)
             } else {
-                (1 << (10 + log2_chunk_size), 1 << (num_vars - 10 - log2_chunk_size))
+                (
+                    1 << (10 + log2_chunk_size),
+                    1 << (num_vars - 10 - log2_chunk_size),
+                )
             };
             // each block produces single result and store to `buf`
             let buf = self.gpu.htod_copy(vec![
@@ -98,7 +126,14 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             unsafe {
                 eval.launch(
                     LaunchConfig::for_num_elems((block_num << 10) as u32),
-                    (&evals, &buf, &gpu_eval_point, data_size_per_block, chunk_size, offset),
+                    (
+                        &evals,
+                        &buf,
+                        &gpu_eval_point,
+                        data_size_per_block,
+                        chunk_size,
+                        offset,
+                    ),
                 )?;
             };
             println!("Time taken to call kernel: {:.2?}", now.elapsed());
@@ -230,13 +265,17 @@ mod tests {
 
     #[test]
     fn test_eval() -> Result<(), DriverError> {
-        let num_vars = 18;
+        let num_vars = 22;
         let rng = OsRng::default();
         let evals = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
 
         let gpu_api_wrapper = GPUApiWrapper::<Fr>::setup()?;
-        gpu_api_wrapper.load_ptx(MULTILINEAR_POLY_KERNEL, "multilinear", &["eval"])?;
+        gpu_api_wrapper.load_ptx(
+            MULTILINEAR_POLY_KERNEL,
+            "multilinear",
+            &["convert_to_montgomery", "eval"],
+        )?;
 
         let now = Instant::now();
         let eval_poly_result_by_cpu = cpu::multilinear::evaluate(&evals, &point);
