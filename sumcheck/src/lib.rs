@@ -154,56 +154,6 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(F::from_montgomery_form(results[0]))
     }
 
-    pub fn eval_by_coeff(
-        &self,
-        num_vars: usize,
-        poly_coeffs: &[F],
-        point: &[F],
-    ) -> Result<F, DriverError> {
-        let now = Instant::now();
-        let point_montgomery = point
-            .into_iter()
-            .map(|f| F::to_montgomery_form(*f))
-            .collect_vec();
-
-        // copy to GPU
-        let gpu_coeffs = self.gpu.htod_copy(
-            poly_coeffs
-                .into_par_iter()
-                .map(|&coeff| F::to_canonical_form(coeff))
-                .collect(),
-        )?;
-        let gpu_eval_point = self.gpu.htod_copy(point_montgomery)?;
-        let monomial_evals = self
-            .gpu
-            .htod_copy(vec![FieldBinding::default(); 1 << num_vars])?;
-        println!("Time taken to initialise data: {:.2?}", now.elapsed());
-
-        let now = Instant::now();
-        let eval_by_coeff = self.gpu.get_func("multilinear", "eval_by_coeff").unwrap();
-
-        unsafe {
-            eval_by_coeff.launch(
-                LaunchConfig::for_num_elems(1 << num_vars as u32),
-                (&gpu_coeffs, &gpu_eval_point, num_vars, &monomial_evals),
-            )?;
-        };
-        println!("Time taken to call kernel: {:.2?}", now.elapsed());
-
-        let now = Instant::now();
-        let monomial_evals = self.gpu.sync_reclaim(monomial_evals)?;
-        println!("Time taken to synchronize: {:.2?}", now.elapsed());
-
-        let now = Instant::now();
-        let result = monomial_evals
-            .into_iter()
-            .step_by(1024)
-            .map(|eval| F::from_canonical_form(eval))
-            .sum::<F>();
-        println!("Time taken to calculate sum: {:.2?}", now.elapsed());
-        Ok(result)
-    }
-
     pub fn mul(&self, values: &[F; 2]) -> Result<F, DriverError> {
         let now = Instant::now();
         let gpu_values = self
@@ -234,34 +184,14 @@ mod tests {
     use std::time::Instant;
 
     use cudarc::driver::DriverError;
-    use ff::{Field, PrimeField};
+    use ff::Field;
     use halo2curves::bn256::Fr;
     use itertools::Itertools;
     use rand::rngs::OsRng;
-    use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
     use crate::{cpu, MULTILINEAR_POLY_KERNEL, SCALAR_MULTIPLICATION_KERNEL};
 
     use super::GPUApiWrapper;
-
-    fn eval_by_coeff_cpu<F: PrimeField>(poly_coeffs: &[F], point: &[F], num_vars: usize) -> F {
-        poly_coeffs
-            .par_iter()
-            .enumerate()
-            .map(|(i, coeff)| {
-                if *coeff == F::ZERO {
-                    F::ZERO
-                } else {
-                    let indices = (0..num_vars).map(|j| (i >> j) & 1).collect_vec();
-                    let mut result = coeff.clone();
-                    for (index, point) in indices.iter().zip(point.iter()) {
-                        result *= if *index == 1 { *point } else { F::ONE };
-                    }
-                    result
-                }
-            })
-            .sum()
-    }
 
     #[test]
     fn test_eval() -> Result<(), DriverError> {
