@@ -8,9 +8,8 @@ use regex::Regex;
 
 fn main() {
     // Tell cargo to invalidate the built crate whenever files of interest changes.
-    println!("cargo:rerun-if-changed=src/cuda/kernels/multilinear.cu");
-    println!("cargo:rerun-if-changed=src/cuda/kernels/sumcheck.cu");
-    println!("cargo:rerun-if-changed=src/cuda/kernels/scalar_multiplication.cu");
+    println!("cargo:rerun-if-changed=src/gpu/cuda/kernels/multilinear.cu");
+    println!("cargo:rerun-if-changed=src/gpu/cuda/kernels/sumcheck.cu");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
@@ -22,11 +21,11 @@ fn main() {
 
     // build the cuda kernels
     let cuda_src = [
-        "src/cuda/kernels/multilinear.cu",
-        "src/cuda/kernels/scalar_multiplication.cu",
+        "src/gpu/cuda/kernels/multilinear.cu",
+        "src/gpu/cuda/kernels/sumcheck.cu",
     ]
     .map(|path| PathBuf::from(path));
-    let ptx_file = ["multilinear.ptx", "scalar_multiplication.ptx"].map(|file| out_dir.join(file));
+    let ptx_file = ["multilinear.ptx", "sumcheck.ptx"].map(|file| out_dir.join(file));
 
     for (cuda_src, ptx_file) in cuda_src.into_iter().zip(ptx_file) {
         let nvcc_status = Command::new("nvcc")
@@ -55,7 +54,7 @@ fn main() {
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
-        .header("src/cuda/includes/wrapper.h")
+        .header("src/gpu/cuda/includes/wrapper.h")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(CargoCallbacks))
