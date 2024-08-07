@@ -1,5 +1,5 @@
-#ifndef __PRIME_FIELD_H__
-#define __PRIME_FIELD_H__
+#ifndef __FIELD_BINDING_H__
+#define __FIELD_BINDING_H__
 
 #include <stdint.h>
 

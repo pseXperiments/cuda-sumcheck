@@ -65,4 +65,3 @@ macro_rules! field_binding_conversion {
 }
 
 field_binding_conversion!(Fr);
-
