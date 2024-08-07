@@ -1,7 +1,7 @@
 use super::arithmetic::div_ceil;
 
 fn num_threads() -> usize {
-    return rayon::current_num_threads();
+    rayon::current_num_threads()
 }
 
 fn parallelize_iter<I, T, F>(iter: I, f: F)
