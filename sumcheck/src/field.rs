@@ -29,7 +29,10 @@ macro_rules! field_binding_conversion {
                     .map(|data| data.to_le_bytes())
                     .collect_vec()
                     .concat();
-                $field::from_raw_bytes_unchecked(bytes.as_ref())
+                let value = $field::from_raw_bytes_unchecked(bytes.as_ref());
+                // This multiplication of identity is for doing montgomery reduction
+                // if value is larger than modulus, it will subtract modulus
+                value * $field::ONE
             }
         }
 
@@ -62,3 +65,4 @@ macro_rules! field_binding_conversion {
 }
 
 field_binding_conversion!(Fr);
+
