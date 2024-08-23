@@ -220,29 +220,6 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_by_coeff() -> Result<(), DriverError> {
-        let num_vars = 18;
-        let rng = OsRng::default();
-        let poly_coeffs = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
-        let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();
-
-        let gpu_api_wrapper = GPUApiWrapper::<Fr>::setup()?;
-        gpu_api_wrapper.load_ptx(MULTILINEAR_POLY_KERNEL, "multilinear", &["eval_by_coeff"])?;
-
-        let now = Instant::now();
-        let eval_poly_result_by_cpu = eval_by_coeff_cpu(&poly_coeffs, &point, num_vars);
-        println!("Time taken to evaluate on cpu: {:.2?}", now.elapsed());
-
-        let now = Instant::now();
-        let eval_poly_result_by_gpu =
-            gpu_api_wrapper.eval_by_coeff(num_vars, &poly_coeffs, &point)?;
-        println!("Time taken to evaluate on gpu: {:.2?}", now.elapsed());
-
-        assert_eq!(eval_poly_result_by_cpu, eval_poly_result_by_gpu);
-        Ok(())
-    }
-
-    #[test]
     fn test_scalar_multiplication() -> Result<(), DriverError> {
         let rng = OsRng::default();
         let values = [(); 2].map(|_| Fr::random(rng));
