@@ -39,11 +39,11 @@ extern "C" __global__ void combine_and_sum(
 extern "C" __global__ void fold_into_half(
     unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* challenge
 ) {
-    int tid = threadIdx.x;
+    int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
-    const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride + (blockIdx.x % num_blocks_per_poly) * blockDim.x;
-    const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size + (blockIdx.x % num_blocks_per_poly) * blockDim.x;
-    while (tid < stride && buf_offset < (blockIdx.x / num_blocks_per_poly + 1) * stride) {
+    const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride;
+    const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
+    while (tid < stride) {
         buf[buf_offset + tid] = (*challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
         tid += blockDim.x * num_blocks_per_poly;
     }
@@ -52,9 +52,9 @@ extern "C" __global__ void fold_into_half(
 extern "C" __global__ void fold_into_half_in_place(
     unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* challenge
 ) {
-    int tid = threadIdx.x;
+    int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
-    const int offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size + (blockIdx.x % num_blocks_per_poly) * blockDim.x;
+    const int offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
     while (tid < stride) {
         int idx = offset + tid;
         polys[idx] = (*challenge) * (polys[idx + stride] - polys[idx]) + polys[idx];
