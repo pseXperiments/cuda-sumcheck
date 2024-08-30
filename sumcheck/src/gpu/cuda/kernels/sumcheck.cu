@@ -44,7 +44,9 @@ extern "C" __global__ void fold_into_half(
     const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride;
     const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
     while (tid < stride) {
-        buf[buf_offset + tid] = (*challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
+        if (*challenge == fr::zero()) buf[buf_offset + tid] = polys[poly_offset + tid];
+        else if (*challenge == fr::one()) buf[buf_offset + tid] = polys[poly_offset + tid + stride];
+        else buf[buf_offset + tid] = (*challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
         tid += blockDim.x * num_blocks_per_poly;
     }
 }
