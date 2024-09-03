@@ -3,6 +3,16 @@
 
 using namespace bb;
 
+// TODO : Pass transcript and squeeze random challenge using hash function
+__device__ fr squeeze_challenge(fr* transcript) {
+    // if (threadIdx.x == 0) {
+    //     challenges[index] = fr(1034);
+    // }
+
+    // TODO: Apply hash function
+    return fr(1034);
+}
+
 // TODO
 __device__ fr combine_function(fr* evals, unsigned int start, unsigned int stride, unsigned int num_args) {
     fr result = fr::one();
@@ -33,36 +43,31 @@ extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsign
 }
 
 extern "C" __global__ void fold_into_half(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* challenge
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
     const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride;
     const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
+    fr challenge = squeeze_challenge(transcript);
     while (tid < stride) {
-        if (*challenge == fr::zero()) buf[buf_offset + tid] = polys[poly_offset + tid];
-        else if (*challenge == fr::one()) buf[buf_offset + tid] = polys[poly_offset + tid + stride];
-        else buf[buf_offset + tid] = (*challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
+        if (challenge == fr::zero()) buf[buf_offset + tid] = polys[poly_offset + tid];
+        else if (challenge == fr::one()) buf[buf_offset + tid] = polys[poly_offset + tid + stride];
+        else buf[buf_offset + tid] = (challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
         tid += blockDim.x * num_blocks_per_poly;
     }
 }
 
 extern "C" __global__ void fold_into_half_in_place(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* challenge
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
     const int offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
+    fr challenge = squeeze_challenge(transcript);
     while (tid < stride) {
         int idx = offset + tid;
-        polys[idx] = (*challenge) * (polys[idx + stride] - polys[idx]) + polys[idx];
+        polys[idx] = (challenge) * (polys[idx + stride] - polys[idx]) + polys[idx];
         tid += blockDim.x * num_blocks_per_poly;
-    }
-}
-
-// TODO : Pass transcript and squeeze random challenge using hash function
-extern "C" __global__ void squeeze_challenge(fr* challenges, unsigned int index) {
-    if (threadIdx.x == 0) {
-        challenges[index] = fr(1034);
     }
 }

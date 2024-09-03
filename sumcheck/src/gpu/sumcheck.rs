@@ -5,6 +5,7 @@ use ff::PrimeField;
 
 use crate::{
     fieldbinding::{FromFieldBinding, ToFieldBinding},
+    transcript::CudaTranscript,
     FieldBinding, GPUApiWrapper,
 };
 
@@ -17,8 +18,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         sum: F,
         polys: &mut CudaViewMut<FieldBinding>,
         buf: RefCell<CudaViewMut<FieldBinding>>,
-        challenges: &mut CudaViewMut<FieldBinding>,
-        round_evals: RefCell<CudaViewMut<FieldBinding>>,
+        transcript: RefCell<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let initial_poly_num_vars = num_vars;
         for round in 0..num_vars {
@@ -29,17 +29,15 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 num_polys,
                 &polys.slice(..),
                 buf.borrow_mut(),
-                round_evals.borrow_mut(),
+                transcript.borrow_mut(),
             )?;
-            // squeeze challenge
-            self.squeeze_challenge(round, challenges)?;
             // fold_into_half_in_place
             self.fold_into_half_in_place(
                 initial_poly_num_vars,
                 round,
                 num_polys,
                 polys,
-                &challenges.slice(round..round + 1),
+                transcript.borrow_mut(),
             )?;
         }
         Ok(())
@@ -53,7 +51,8 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         num_polys: usize,
         polys: &CudaView<FieldBinding>,
         mut buf: RefMut<CudaViewMut<FieldBinding>>,
-        mut round_evals: RefMut<CudaViewMut<FieldBinding>>,
+        // todo: how can this find results of round
+        mut transcript: RefMut<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let num_blocks_per_poly = self.max_blocks_per_sm()? / num_polys * self.num_sm()?;
         let num_threads_per_block = 1024;
@@ -113,8 +112,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 
     pub(crate) fn squeeze_challenge(
         &self,
-        round: usize,
-        challenges: &mut CudaViewMut<FieldBinding>,
+        transcript: &mut impl CudaTranscript<F>,
     ) -> Result<(), DriverError> {
         let squeeze_challenge = self.gpu.get_func("sumcheck", "squeeze_challenge").unwrap();
         let launch_config = LaunchConfig {
@@ -122,6 +120,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             block_dim: (1, 1, 1),
             shared_mem_bytes: 0,
         };
+        let challenges = todo!();
         unsafe {
             squeeze_challenge.launch(launch_config, (challenges, round))?;
         }
@@ -134,7 +133,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         round: usize,
         num_polys: usize,
         polys: &mut CudaViewMut<FieldBinding>,
-        challenge: &CudaView<FieldBinding>,
+        mut transcript: RefMut<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let fold_into_half_in_place = self
             .gpu
@@ -155,7 +154,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                     1 << initial_poly_num_vars,
                     num_blocks_per_poly,
                     polys,
-                    challenge,
+                    &mut *transcript,
                 ),
             )?;
         };
@@ -173,10 +172,14 @@ mod tests {
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
-    use crate::{cpu, GPUApiWrapper, MULTILINEAR_PTX, SUMCHECK_PTX};
+    use crate::{
+        cpu,
+        transcript::{CudaKeccakTranscript, CudaTranscript},
+        GPUApiWrapper, LibraryError, MULTILINEAR_PTX, SUMCHECK_PTX,
+    };
 
     #[test]
-    fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
+    fn test_eval_at_k_and_combine() -> Result<(), LibraryError> {
         let num_vars = 10;
         let num_polys = 4;
         let max_degree = 4;
@@ -188,17 +191,24 @@ mod tests {
             .map(|_| (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec())
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUApiWrapper::<Fr>::setup()?;
-        gpu_api_wrapper.gpu.load_ptx(
-            Ptx::from_src(MULTILINEAR_PTX),
-            "multilinear",
-            &["convert_to_montgomery_form"],
-        )?;
-        gpu_api_wrapper.gpu.load_ptx(
-            Ptx::from_src(SUMCHECK_PTX),
-            "sumcheck",
-            &["fold_into_half", "combine", "sum"],
-        )?;
+        let mut gpu_api_wrapper =
+            GPUApiWrapper::<Fr>::setup().map_err(|err| LibraryError::Driver(err))?;
+        gpu_api_wrapper
+            .gpu
+            .load_ptx(
+                Ptx::from_src(MULTILINEAR_PTX),
+                "multilinear",
+                &["convert_to_montgomery_form"],
+            )
+            .map_err(|err| LibraryError::Driver(err))?;
+        gpu_api_wrapper
+            .gpu
+            .load_ptx(
+                Ptx::from_src(SUMCHECK_PTX),
+                "sumcheck",
+                &["fold_into_half", "combine", "sum"],
+            )
+            .map_err(|err| LibraryError::Driver(err))?;
 
         let mut cpu_round_evals = vec![];
         let now = Instant::now();
@@ -217,29 +227,48 @@ mod tests {
         );
 
         // copy polynomials to device
-        let gpu_polys = gpu_api_wrapper.copy_to_device(&polys.concat())?;
-        let mut buf = gpu_api_wrapper.malloc_on_device(num_polys << (num_vars - 1))?;
+        let gpu_polys = gpu_api_wrapper
+            .copy_to_device(&polys.concat())
+            .map_err(|err| LibraryError::Driver(err))?;
+        let mut buf = gpu_api_wrapper
+            .malloc_on_device(num_polys << (num_vars - 1))
+            .map_err(|err| LibraryError::Driver(err))?;
         let buf_view = RefCell::new(buf.slice_mut(..));
-        let mut round_evals = gpu_api_wrapper.malloc_on_device(max_degree as usize + 1)?;
+        let mut round_evals = gpu_api_wrapper
+            .malloc_on_device(max_degree as usize + 1)
+            .map_err(|err| LibraryError::Driver(err))?;
         let round_evals_view = RefCell::new(round_evals.slice_mut(..));
+
+        let count = 42; // TODO
+        let add_len = 42;
+        let mut transcript = CudaKeccakTranscript::<Fr> {};
+        let mut transcript_slice =
+            transcript.get_cuda_slice(&mut gpu_api_wrapper, count, add_len)?;
+        let transcript_view = RefCell::new(transcript_slice.slice_mut(..));
         let round = 0;
         let now = Instant::now();
-        gpu_api_wrapper.eval_at_k_and_combine(
-            num_vars,
-            round,
-            max_degree as usize,
-            num_polys,
-            &gpu_polys.slice(..),
-            buf_view.borrow_mut(),
-            round_evals_view.borrow_mut(),
-        )?;
-        gpu_api_wrapper.gpu.synchronize()?;
+        gpu_api_wrapper
+            .eval_at_k_and_combine(
+                num_vars,
+                round,
+                max_degree as usize,
+                num_polys,
+                &gpu_polys.slice(..),
+                buf_view.borrow_mut(),
+                transcript_view.borrow_mut(),
+            )
+            .map_err(|err| LibraryError::Driver(err))?;
+        gpu_api_wrapper
+            .gpu
+            .synchronize()
+            .map_err(|err| LibraryError::Driver(err))?;
         println!(
             "Time taken to eval_at_k_and_combine on gpu: {:.2?}",
             now.elapsed()
         );
         let gpu_round_evals = gpu_api_wrapper
-            .dtoh_sync_copy(round_evals.slice(0..(max_degree + 1) as usize), true)?;
+            .dtoh_sync_copy(round_evals.slice(0..(max_degree + 1) as usize), true)
+            .map_err(|err| LibraryError::Driver(err))?;
         cpu_round_evals
             .iter()
             .zip_eq(gpu_round_evals.iter())
@@ -283,7 +312,7 @@ mod tests {
             round,
             num_polys,
             &mut gpu_polys.slice_mut(..),
-            &gpu_challenge.slice(..),
+            &mut transcript,
         )?;
         gpu_api_wrapper.gpu.synchronize()?;
         println!(
@@ -368,8 +397,7 @@ mod tests {
             sum,
             &mut gpu_polys.slice_mut(..),
             buf_view,
-            &mut challenges.slice_mut(..),
-            round_evals_view,
+            transcript,
         )?;
         gpu_api_wrapper.gpu.synchronize()?;
         println!(
