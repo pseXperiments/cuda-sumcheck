@@ -3,7 +3,23 @@
 
 using namespace bb;
 
-__device__ void sum(fr* data, const int stride) {
+// TODO
+__device__ fr combine_function(fr* evals, unsigned int start, unsigned int stride, unsigned int num_args) {
+    fr result = fr::one();
+    for (int i = 0; i < num_args; i++) result *= evals[start + i * stride];
+    return result;
+}
+
+extern "C" __global__ void combine(fr* buf, unsigned int size, unsigned int num_args) {
+    const int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + tid;
+    while (idx < size) {
+        buf[idx] = combine_function(buf, idx, size, num_args);
+        idx += blockDim.x * gridDim.x;
+    }
+}
+
+extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsigned int index) {
     const int tid = threadIdx.x;
     for (unsigned int s = stride; s > 0; s >>= 1) {
         int idx = tid;
@@ -13,27 +29,7 @@ __device__ void sum(fr* data, const int stride) {
         }
         __syncthreads();
     }
-}
-
-// TODO
-__device__ fr combine_function(fr* evals, unsigned int start, unsigned int stride, unsigned int num_args) {
-    fr result = fr::zero();
-    for (int i = 0; i < num_args; i++) result += evals[start + i * stride];
-    return result;
-}
-
-extern "C" __global__ void combine_and_sum(
-    fr* buf, fr* result, unsigned int size, unsigned int num_args, unsigned int index
-) {
-    const int tid = threadIdx.x;
-    int idx = tid;
-    while (idx < size) {
-        buf[idx] = combine_function(buf, idx, size, num_args);
-        idx += blockDim.x;
-    }
-    __syncthreads();
-    sum(buf, size >> 1);
-    if (tid == 0) result[index] = buf[0];
+    if (tid == 0) result[index] = data[0];
 }
 
 extern "C" __global__ void fold_into_half(

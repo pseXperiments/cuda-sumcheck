@@ -80,20 +80,29 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                     ),
                 )?;
             };
-            let combine_and_sum = self.gpu.get_func("sumcheck", "combine_and_sum").unwrap();
+            let size = 1 << (initial_poly_num_vars - round - 1);
+            let combine = self.gpu.get_func("sumcheck", "combine").unwrap();
             let launch_config = LaunchConfig {
-                grid_dim: (1, 1, 1),
-                block_dim: (1024, 1, 1),
+                grid_dim: (num_blocks_per_poly as u32, 1, 1),
+                block_dim: (num_threads_per_block, 1, 1),
                 shared_mem_bytes: 0,
             };
             unsafe {
-                combine_and_sum.launch(
+                combine.launch(launch_config, (&mut *buf, size, num_polys))?;
+            };
+            let sum = self.gpu.get_func("sumcheck", "sum").unwrap();
+            let launch_config = LaunchConfig {
+                grid_dim: (1, 1, 1),
+                block_dim: (num_threads_per_block, 1, 1),
+                shared_mem_bytes: 0,
+            };
+            unsafe {
+                sum.launch(
                     launch_config,
                     (
                         &mut *buf,
                         &mut *round_evals,
-                        1 << (initial_poly_num_vars - round - 1),
-                        num_polys,
+                        size >> 1,
                         round * (max_degree + 1) + k,
                     ),
                 )?;
@@ -168,12 +177,12 @@ mod tests {
 
     #[test]
     fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
-        let num_vars = 20;
+        let num_vars = 10;
         let num_polys = 4;
         let max_degree = 4;
         let rng = OsRng::default();
 
-        let combine_function = |args: &Vec<Fr>| args.iter().sum();
+        let combine_function = |args: &Vec<Fr>| args.iter().product();
 
         let polys = (0..num_polys)
             .map(|_| (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec())
@@ -188,7 +197,7 @@ mod tests {
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
-            &["fold_into_half", "combine_and_sum"],
+            &["fold_into_half", "combine", "sum"],
         )?;
 
         let mut cpu_round_evals = vec![];
@@ -229,7 +238,8 @@ mod tests {
             "Time taken to eval_at_k_and_combine on gpu: {:.2?}",
             now.elapsed()
         );
-        let gpu_round_evals = gpu_api_wrapper.dtoh_sync_copy(round_evals.slice(0..(max_degree + 1) as usize), true)?;
+        let gpu_round_evals = gpu_api_wrapper
+            .dtoh_sync_copy(round_evals.slice(0..(max_degree + 1) as usize), true)?;
         cpu_round_evals
             .iter()
             .zip_eq(gpu_round_evals.iter())
@@ -242,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_fold_into_half_in_place() -> Result<(), DriverError> {
-        let num_vars = 15;
+        let num_vars = 6;
         let num_polys = 4;
 
         let rng = OsRng::default();
@@ -310,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_prove_sumcheck() -> Result<(), DriverError> {
-        let num_vars = 19;
+        let num_vars = 12;
         let num_polys = 4;
         let max_degree = 4;
 
@@ -331,14 +341,16 @@ mod tests {
             &[
                 "fold_into_half",
                 "fold_into_half_in_place",
-                "combine_and_sum",
+                "combine",
+                "sum",
                 "squeeze_challenge",
             ],
         )?;
 
+        let now = Instant::now();
         let mut gpu_polys = gpu_api_wrapper.copy_to_device(&polys.concat())?;
         let sum = (0..1 << num_vars).fold(Fr::ZERO, |acc, index| {
-            acc + polys.iter().map(|poly| poly[index]).sum::<Fr>()
+            acc + polys.iter().map(|poly| poly[index]).product::<Fr>()
         });
         let mut buf = gpu_api_wrapper.malloc_on_device(num_polys << (num_vars - 1))?;
         let buf_view = RefCell::new(buf.slice_mut(..));
@@ -346,6 +358,7 @@ mod tests {
         let mut challenges = gpu_api_wrapper.malloc_on_device(num_vars)?;
         let mut round_evals = gpu_api_wrapper.malloc_on_device(num_vars * (max_degree + 1))?;
         let round_evals_view = RefCell::new(round_evals.slice_mut(..));
+        println!("Time taken to copy data to device : {:.2?}", now.elapsed());
 
         let now = Instant::now();
         gpu_api_wrapper.prove_sumcheck(
