@@ -1,10 +1,12 @@
+#include <stdint.h>
 #include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
+#include "../includes/transcript.cuh"
 #include "./multilinear.cu"
 
 using namespace bb;
 
-// TODO : Pass transcript and squeeze random challenge using hash function
-__device__ fr squeeze_challenge(fr* transcript) {
+// TODO: Pass transcript and squeeze random challenge using hash function
+__device__ fr squeeze_challenge(uint8_t* transcript) {
     // if (threadIdx.x == 0) {
     //     challenges[index] = fr(1034);
     // }
@@ -43,7 +45,7 @@ extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsign
 }
 
 extern "C" __global__ void fold_into_half(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* transcript
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, uint8_t* transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
@@ -59,7 +61,7 @@ extern "C" __global__ void fold_into_half(
 }
 
 extern "C" __global__ void fold_into_half_in_place(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* transcript
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, uint8_t* transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
