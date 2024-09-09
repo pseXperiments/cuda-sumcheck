@@ -152,6 +152,25 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
     }
 }
 
+pub struct GPUApiWrapperTranscript {
+    gpu: Arc<CudaDevice>,
+}
+
+impl GPUApiWrapperTranscript {
+    pub fn copy_and_malloc(
+        &mut self,
+        host_data: &[u8],
+        add_len: usize,
+    ) -> Result<CudaSlice<u8>, DriverError> {
+        let mut device_data = unsafe { self.gpu.alloc(host_data.len() + add_len) }?;
+        self.gpu.htod_copy_into(
+            host_data.to_vec(), (&device_data + add_len),
+        )?;
+        Ok(device_data)
+    }
+    
+}
+
 #[derive(Debug)]
 pub enum LibraryError {
     Driver(DriverError),

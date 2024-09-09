@@ -21,7 +21,12 @@ extern "C" __global__ void combine(fr* buf, unsigned int size, unsigned int num_
     }
 }
 
-extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsigned int index) {
+extern "C" __global__ void sum(
+    fr* data, unsigned int stride, unsigned int index,
+    uint8_t* start_transcript, uint8_t* cursor_transcript, uint8_t* end_transcript
+) {
+    Transcript t;
+    t.init_transcript(start_transcript, cursor_transcript, end_transcript);
     const int tid = threadIdx.x;
     for (unsigned int s = stride; s > 0; s >>= 1) {
         int idx = tid;
@@ -31,6 +36,7 @@ extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsign
         }
         __syncthreads();
     }
+    t.write_field_element(data[0]);
     if (tid == 0) result[index] = data[0];
 }
 
