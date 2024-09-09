@@ -1,4 +1,5 @@
 #include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
+#include <stdint.h>
 #include <stdio.h>
 using namespace bb;
 
