@@ -1,23 +1,26 @@
 use crate::FieldBinding;
+use cudarc::driver::DeviceRepr;
 use ff::{Field, PrimeField};
 use halo2curves::{bn256::Fr, serde::SerdeObject};
 use itertools::Itertools;
 
-pub trait FromFieldBinding<F> {
-    fn from_canonical_form(b: FieldBinding) -> F;
+pub trait FieldBindingConversion<F> {
+    type FieldBinding: Copy + DeviceRepr + Send + Sync + Unpin;
 
-    fn from_montgomery_form(b: FieldBinding) -> F;
+    fn from_canonical_form(b: Self::FieldBinding) -> F;
+
+    fn from_montgomery_form(b: Self::FieldBinding) -> F;
+
+    fn to_canonical_form(f: F) -> Self::FieldBinding;
+
+    fn to_montgomery_form(f: F) -> Self::FieldBinding;
 }
 
-pub trait ToFieldBinding<F> {
-    fn to_canonical_form(f: F) -> FieldBinding;
+macro_rules! field_binding_conversion_impl {
+    ($field:ident, $field_binding:ident) => {
+        impl FieldBindingConversion<$field> for $field {
+            type FieldBinding = $field_binding;
 
-    fn to_montgomery_form(f: F) -> FieldBinding;
-}
-
-macro_rules! field_binding_conversion {
-    ($field:ident) => {
-        impl FromFieldBinding<$field> for $field {
             fn from_canonical_form(b: FieldBinding) -> $field {
                 $field::from_raw(b.data)
             }
@@ -34,9 +37,7 @@ macro_rules! field_binding_conversion {
                 // if value is larger than modulus, it will subtract modulus
                 value * $field::ONE
             }
-        }
 
-        impl ToFieldBinding<$field> for $field {
             fn to_canonical_form(f: $field) -> FieldBinding {
                 let repr = f.to_repr();
                 let bytes = repr.as_ref();
@@ -64,4 +65,5 @@ macro_rules! field_binding_conversion {
     };
 }
 
-field_binding_conversion!(Fr);
+#[cfg(feature = "bn254")]
+field_binding_conversion_impl!(Fr, FieldBinding);
