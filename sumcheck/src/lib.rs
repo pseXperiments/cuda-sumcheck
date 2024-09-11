@@ -77,60 +77,27 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(device_ptr)
     }
 
-    pub fn copy_and_malloc(
+    pub fn copy_and_malloc_transcript(
         &mut self,
-        host_data: &[F],
+        host_data: &[u8],
         add_len: usize,
-    ) -> Result<CudaSlice<FieldBinding>, DriverError> {
-        let mut device_data = unsafe { self.gpu.alloc(host_data.len() + add_len) }?;
-        self.gpu.htod_copy_into(
-            host_data
-                .into_par_iter()
-                .map(|&eval| F::to_canonical_form(eval))
-                .collect(),
-            &mut device_data,
-        )?;
-        let convert_to_montgomery_form = self
-            .gpu
-            .get_func("multilinear", "convert_to_montgomery_form")
-            .unwrap();
-        let size = host_data.len();
-        unsafe {
-            convert_to_montgomery_form.launch(
-                LaunchConfig::for_num_elems(size as u32),
-                (&device_data, size),
-            )?;
-        };
-        Ok(device_data)
+    ) -> Result<(CudaSlice<u8>, usize, usize), DriverError> {
+        let mut padding = vec![0; add_len];
+        let mut data = host_data.to_vec();
+        data.append(&mut padding);
+
+        let mut device_data = unsafe { self.gpu.alloc(data.len()) }?;
+        self.gpu.htod_copy_into::<u8>(data, &mut device_data)?;
+        let cursor = host_data.len();
+        let end = cursor + add_len;
+        Ok((device_data, cursor, end))
     }
 
-    pub fn dtoh_sync_copy(
+    pub fn dtoh_sync_copy<T: DeviceRepr>(
         &self,
-        device_data: CudaView<FieldBinding>,
-        convert_to_montgomery_form: bool,
-    ) -> Result<Vec<F>, DriverError> {
-        let host_data = self.gpu.dtoh_sync_copy(&device_data)?;
-        let mut target = vec![F::ZERO; host_data.len()];
-        if convert_to_montgomery_form {
-            parallelize(&mut target, |(target, start)| {
-                target
-                    .iter_mut()
-                    .zip(host_data.iter().skip(start))
-                    .for_each(|(target, &host_data)| {
-                        *target = F::from_montgomery_form(host_data);
-                    });
-            });
-        } else {
-            parallelize(&mut target, |(target, start)| {
-                target
-                    .iter_mut()
-                    .zip(host_data.iter().skip(start))
-                    .for_each(|(target, &host_data)| {
-                        *target = F::from_canonical_form(host_data);
-                    });
-            });
-        }
-        Ok(target)
+        device_data: CudaView<T>,
+    ) -> Result<Vec<T>, DriverError> {
+        self.gpu.dtoh_sync_copy::<T, CudaView<T>>(&device_data)
     }
 
     pub fn max_blocks_per_sm(&self) -> Result<usize, DriverError> {
@@ -150,25 +117,6 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
     pub fn shared_mem_bytes_per_block(&self) -> Result<usize, DriverError> {
         Ok(self.gpu.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK)? as usize)
     }
-}
-
-pub struct GPUApiWrapperTranscript {
-    gpu: Arc<CudaDevice>,
-}
-
-impl GPUApiWrapperTranscript {
-    pub fn copy_and_malloc(
-        &mut self,
-        host_data: &[u8],
-        add_len: usize,
-    ) -> Result<CudaSlice<u8>, DriverError> {
-        let mut device_data = unsafe { self.gpu.alloc(host_data.len() + add_len) }?;
-        self.gpu.htod_copy_into(
-            host_data.to_vec(), (&device_data + add_len),
-        )?;
-        Ok(device_data)
-    }
-    
 }
 
 #[derive(Debug)]

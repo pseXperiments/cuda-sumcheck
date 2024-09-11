@@ -23,10 +23,10 @@ extern "C" __global__ void combine(fr* buf, unsigned int size, unsigned int num_
 
 extern "C" __global__ void sum(
     fr* data, unsigned int stride, unsigned int index,
-    uint8_t* start_transcript, uint8_t* cursor_transcript, uint8_t* end_transcript
+    uint8_t* start_transcript, uint8_t* cursor_transcript
 ) {
     Transcript t;
-    t.init_transcript(start_transcript, cursor_transcript, end_transcript);
+    t.init_transcript(start_transcript, cursor_transcript);
     const int tid = threadIdx.x;
     for (unsigned int s = stride; s > 0; s >>= 1) {
         int idx = tid;
@@ -36,17 +36,16 @@ extern "C" __global__ void sum(
         }
         __syncthreads();
     }
-    t.write_field_element(data[0]);
-    if (tid == 0) result[index] = data[0];
+    if (tid == 0) t.write_field_element(data[0]);
 }
 
 extern "C" __global__ void fold_into_half(
     unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf,
-    uint8_t* start_transcript, uint8_t* cursor_transcript, uint8_t* end_transcript
+    uint8_t* start_transcript, uint8_t* cursor_transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     Transcript t;
-    t.init_transcript(start_transcript, cursor_transcript, end_transcript);
+    t.init_transcript(start_transcript, cursor_transcript);
     const int stride = 1 << (num_vars - 1);
     const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride;
     const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
@@ -61,11 +60,11 @@ extern "C" __global__ void fold_into_half(
 
 extern "C" __global__ void fold_into_half_in_place(
     unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys,
-    uint8_t* start_transcript, uint8_t* cursor_transcript, uint8_t* end_transcript
+    uint8_t* start_transcript, uint8_t* cursor_transcript
 ) {
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     Transcript t;
-    t.init_transcript(start_transcript, cursor_transcript, end_transcript);
+    t.init_transcript(start_transcript, cursor_transcript);
     const int stride = 1 << (num_vars - 1);
     const int offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
     fr challenge = t.squeeze_challenge();
