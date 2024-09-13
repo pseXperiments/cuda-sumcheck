@@ -1,48 +1,28 @@
 # Overview
 
-This project aims to implement Sumcheck protocol on GPU via CUDA, following the algorithm described from [here](https://github.com/ingonyama-zk/super-sumcheck). This project aims to minimize C++ code and provide easy to use Rust API for launching kernel by leveraging [bindgen](https://github.com/rust-lang/rust-bindgen) and [cudarc](https://github.com/coreylowman/cudarc).
+This project aims to implement Sumcheck protocol to run on GPU via CUDA, following the algorithms described in the [paper](https://eprint.iacr.org/2024/1046.pdf).
+Currently algorithm 1 is implemented and tested with bn254 scalar field. Future plan is to implement algorithm 3 and support small prime fields such as Goldilocks.
+
+Only kernels are written in C++ and uses Rust to launch kernels and handle device datas by using [bindgen](https://github.com/rust-lang/rust-bindgen) and [cudarc](https://github.com/coreylowman/cudarc).
+
+## Environment
+
+The implementation has been tested on the following spec.
+
+### OS
+
+Ubuntu 22.04.4 LTS
+
+### GPU
+
+1 NVIDIA A10G Tensor GPU, 24GB Ram
+
+### CUDA version
+
+nvcc version: 12.1
+C++ compiler version: clang-16
+C++ language standard: C++20
 
 ## Architecture
 
 ![cuda-sumcheck-architecture](https://github.com/pseXperiments/cuda-sumcheck/assets/59155248/d288b9d3-4fbd-4789-ba4b-de684efc3f4f)
-
-- `bindgen`: generates Rust struct defined inside CUDA kernels written in C++
-- `cudarc`: safe abstraction for interop with GPU driver
-
-## Structure
-
-```
-.
-├── Cargo.lock
-├── Cargo.toml
-├── build.rs
-├── docs
-│   └── design.md
-└── src
-    ├── cuda
-    │   ├── includes
-    │   │   ├── barretenberg
-    │   │   ├── prime_field.h
-    │   │   ├── test.cpp
-    │   │   └── wrapper.h
-    │   └── kernels
-    │       ├── multilinear.cu
-    │       ├── scalar_multiplication.cu
-    │       └── sumcheck.cu
-    ├── field.rs
-    └── lib.rs
-```
-
-- `build.rs` contains the build script for building the whole project
-
-- `src/cuda/includes/barretenberg/` contains barretenberg lib (https://github.com/AztecProtocol/barretenberg/tree/master) for field implementation in C++
-
-- `src/cuda/includes/prime_field.h` declares `FieldBinding` struct in C representing barretenberg `field` struct. This wrapping is due to the lack of support for C++ language of `bindgen` crate
-
-- `src/cuda/includes/wrapper.h` is interface file for `bindgen` to generate Rust struct from C struct
-
-- In `src/cuda/includes/kernel/`, multiple kernel functions are defined
-
-- In `field.rs`, conversion between `FieldBinding` struct and `halo2curves`' field struct is implemented
-
-- In `lib.rs`, expose APIs to test CUDA kernels via `GPUApiWrapper` struct
