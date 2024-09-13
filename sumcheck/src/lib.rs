@@ -79,11 +79,11 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
     pub fn dtoh_sync_copy(
         &self,
         device_data: CudaView<FieldBinding>,
-        convert_to_montgomery_form: bool,
+        convert_from_montgomery_form: bool,
     ) -> Result<Vec<F>, DriverError> {
         let host_data = self.gpu.dtoh_sync_copy(&device_data)?;
         let mut target = vec![F::ZERO; host_data.len()];
-        if convert_to_montgomery_form {
+        if convert_from_montgomery_form {
             parallelize(&mut target, |(target, start)| {
                 target
                     .iter_mut()
