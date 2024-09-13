@@ -1,4 +1,5 @@
 #include "transcript.cuh"
+#include <stdio.h>
 
 __device__ void Transcript::init_transcript(uint8_t* s, uint8_t* c) {
     start = s;
@@ -22,9 +23,9 @@ __device__ fr Transcript::read_field_element() {
 
 __device__ void Transcript::write_field_element(fr fe) {
     state = fe;
-    uint8_t* write_fe = fe_to_u8(fe);
-    for (int i = 0; i < 32; i++) {
-        *(cursor + i) = write_fe[i];
+    for (int i = 0; i < 4; i++) {
+        printf("%ull\n", fe.data[i]);
+        memcpy((cursor + i * 8), &fe.data[i], 8);
     }
     cursor += 32;
     return;
@@ -39,10 +40,9 @@ __device__ int Transcript::get_size() {
 }
 
 __device__ uint8_t* fe_to_u8(fr fe) {
-    fe.self_to_montgomery_form();
     uint8_t result[32];
     for (int i = 0; i < 4; i++) {
-        memcpy(&result[i * 8], &fe.data[i], sizeof(fe.data[i]));
+        memcpy(&result[i * 8], &fe.data[i], 8);
     }
     return result;
 }

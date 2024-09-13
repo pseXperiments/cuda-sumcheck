@@ -10,6 +10,7 @@ fn main() {
     // Tell cargo to invalidate the built crate whenever files of interest changes.
     println!("cargo:rerun-if-changed=src/gpu/cuda/kernels/multilinear.cu");
     println!("cargo:rerun-if-changed=src/gpu/cuda/kernels/sumcheck.cu");
+    println!("cargo:rerun-if-changed=src/gpu/cuda/includes/transcript.cu");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 

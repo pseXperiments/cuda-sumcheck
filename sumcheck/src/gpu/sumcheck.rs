@@ -160,7 +160,7 @@ mod tests {
 
     use cudarc::nvrtc::Ptx;
     use ff::{Field, PrimeField};
-    use halo2curves::bn256::Fr;
+    use halo2curves::{bn256::Fr, serde::SerdeObject};
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
@@ -171,9 +171,11 @@ mod tests {
     fn from_u8_to_fr(v: Vec<u8>) -> Vec<Fr> {
         println!("{:?}", v);
         let src: Vec<&[u8]> = v.chunks(32).collect();
-        src.into_iter().map(|l| { 
+        src.into_iter().map(|l| {
             println!("{:?}", l);
-            Fr::from_repr_vartime(l.try_into().unwrap()).unwrap() }).collect()
+            let data = l.chunks(8).collect_vec();
+            Fr::from_raw_bytes_unchecked(data.concat().as_slice())
+        }).collect_vec()
     }
 
     #[test]
@@ -269,6 +271,7 @@ mod tests {
             .dtoh_sync_copy(transcript_inner.start.slice(0..((max_degree + 1) as usize * 32)))
             .map_err(|err| LibraryError::Driver(err))?;
         let gpu_round_evals = from_u8_to_fr(transcript_device);
+        println!("{:?}", cpu_round_evals);
         cpu_round_evals
             .iter()
             .zip_eq(gpu_round_evals.iter())
