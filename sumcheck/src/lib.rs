@@ -72,7 +72,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
     }
 
     pub fn malloc_on_device(&self, len: usize) -> Result<CudaSlice<FieldBinding>, DriverError> {
-        let device_ptr = unsafe { self.gpu.alloc(len << 5)? };
+        let device_ptr = unsafe { self.gpu.alloc::<FieldBinding>(len)? };
         Ok(device_ptr)
     }
 

@@ -1,8 +1,7 @@
 use std::cell::{RefCell, RefMut};
 
-use cudarc::driver::{CudaSlice, CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
+use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
 use ff::PrimeField;
-use itertools::Itertools;
 
 use crate::{
     fieldbinding::{FromFieldBinding, ToFieldBinding},
