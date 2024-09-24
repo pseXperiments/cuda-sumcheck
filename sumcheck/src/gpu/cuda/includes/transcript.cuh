@@ -10,7 +10,7 @@ class Transcript {
         uint8_t* cursor;
         fr state;
     public:
-        __device__ void init_transcript(uint8_t* start, uint8_t* cursor);
+        __device__ void init_transcript(uint8_t* start, uint8_t* cursor, fr* state);
         __device__ void write_field_element(fr fe);
         __device__ fr read_field_element();
         __device__ fr squeeze_challenge();

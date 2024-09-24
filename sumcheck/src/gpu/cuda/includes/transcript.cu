@@ -1,10 +1,10 @@
 #include "transcript.cuh"
 #include <stdio.h>
 
-__device__ void Transcript::init_transcript(uint8_t* s, uint8_t* c) {
+__device__ void Transcript::init_transcript(uint8_t* s, uint8_t* c, fr* st) {
     start = s;
     cursor = c;
-    state = fr(0);
+    state = st[0];
 }
 
 __device__ fr Transcript::read_field_element() {
@@ -24,7 +24,6 @@ __device__ fr Transcript::read_field_element() {
 __device__ void Transcript::write_field_element(fr fe) {
     state = fe;
     for (int i = 0; i < 4; i++) {
-        printf("%ull\n", fe.data[i]);
         memcpy((cursor + i * 8), &fe.data[i], 8);
     }
     cursor += 32;
@@ -32,7 +31,7 @@ __device__ void Transcript::write_field_element(fr fe) {
 }
 
 __device__ fr Transcript::squeeze_challenge() {
-    return fr(1034);
+    return state;
 }
 
 __device__ int Transcript::get_size() {
