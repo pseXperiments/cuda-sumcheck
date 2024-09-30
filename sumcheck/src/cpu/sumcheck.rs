@@ -97,10 +97,10 @@ pub(crate) fn verify_sumcheck_transcript<F: PrimeField + halo2curves::serde::Ser
     let mut expected_sum = sum;
     for round_index in 0..num_vars {
         let evals: Vec<F> = transcript
-            .read_field_elements((max_degree + 1) * 32)
+            .read_field_elements(max_degree + 1)
             .unwrap()
             .chunks(32)
-            .map(|e| from_u8_to_f::<F>(e.to_vec())[0])
+            .map(|e| from_u8_to_f::<F>(e))
             .collect_vec();
         if evals.len() != max_degree + 1 {
             return false;

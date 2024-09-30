@@ -5,7 +5,6 @@ use crate::{
 use cudarc::driver::CudaSlice;
 use ff::PrimeField;
 use halo2curves::serde::SerdeObject;
-use itertools::Itertools;
 use std::io::{Cursor, Read, Write};
 
 pub enum Hash {
@@ -34,14 +33,8 @@ impl TranscriptInner {
     }
 }
 
-pub fn from_u8_to_f<F: PrimeField + SerdeObject>(v: Vec<u8>) -> Vec<F> {
-    let src: Vec<&[u8]> = v.chunks(32).collect();
-    src.into_iter()
-        .map(|l| {
-            let data = l.chunks(8).collect_vec();
-            F::from_raw_bytes_unchecked(data.concat().as_slice()) * F::ONE
-        })
-        .collect_vec()
+pub fn from_u8_to_f<F: PrimeField + SerdeObject>(v: &[u8]) -> F {
+    F::from_raw_bytes_unchecked(v) * F::ONE
 }
 
 pub struct CudaKeccakTranscript<F> {
@@ -79,13 +72,12 @@ impl<F: PrimeField + SerdeObject> CudaKeccakTranscript<F> {
         Ok(new_t)
     }
 
-    pub fn read_field_element(&mut self) -> Result<Vec<u8>, LibraryError> {
-        let mut repr: Vec<u8> = vec![];
+    pub fn read_field_element(&mut self) -> Result<[u8; 32], LibraryError> {
+        let mut repr: [u8; 32] = [0; 32];
         self.stream
             .read_exact(repr.as_mut())
             .map_err(|_| LibraryError::Transcript)?;
-        
-        self.state = from_u8_to_f::<F>(repr.clone())[0];
+        self.state = from_u8_to_f::<F>(&repr);
         Ok(repr)
     }
 

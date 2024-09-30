@@ -1,6 +1,6 @@
 use std::cell::{RefCell, RefMut};
 
-use cudarc::driver::{CudaSlice, CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
+use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
 use ff::PrimeField;
 
 use crate::{
@@ -19,7 +19,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         polys: &mut CudaViewMut<FieldBinding>,
         buf: RefCell<CudaViewMut<FieldBinding>>,
         transcript: &mut TranscriptInner,
-        transcript_state: &CudaSlice<FieldBinding>,
+        transcript_state: RefCell<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let initial_poly_num_vars = num_vars;
         for round in 0..num_vars {
@@ -31,7 +31,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 &polys.slice(..),
                 buf.borrow_mut(),
                 transcript,
-                transcript_state,
+                transcript_state.borrow_mut(),
             )?;
             // fold_into_half_in_place
             self.fold_into_half_in_place(
@@ -40,7 +40,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 num_polys,
                 polys,
                 transcript,
-                transcript_state,
+                transcript_state.borrow_mut(),
             )?;
         }
         Ok(())
@@ -55,7 +55,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         polys: &CudaView<FieldBinding>,
         mut buf: RefMut<CudaViewMut<FieldBinding>>,
         transcript: &mut TranscriptInner,
-        transcript_state: &CudaSlice<FieldBinding>,
+        mut transcript_state: RefMut<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let num_blocks_per_poly = self.max_blocks_per_sm()? / num_polys * self.num_sm()?;
         let num_threads_per_block = 1024;
@@ -110,7 +110,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                         round * (max_degree + 1) + k,
                         &mut start_view,
                         &mut cursor,
-                        transcript_state,
+                        &mut *transcript_state,
                     ),
                 )?;
             };
@@ -126,7 +126,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         num_polys: usize,
         polys: &mut CudaViewMut<FieldBinding>,
         transcript: &mut TranscriptInner,
-        state: &CudaSlice<FieldBinding>,
+        mut state: RefMut<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
         let fold_into_half_in_place = self
             .gpu
@@ -152,7 +152,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                     polys,
                     &mut start_view,
                     &mut cursor,
-                    state,
+                    &mut *state,
                 ),
             )?;
         };
@@ -255,9 +255,10 @@ mod tests {
             transcript.get_cuda_slice(&mut gpu_api_wrapper, count, add_len)?;
 
         let state = vec![transcript.state];
-        let state_slice = gpu_api_wrapper
+        let mut state_slice = gpu_api_wrapper
             .copy_to_device(&state.as_slice())
             .map_err(|err| LibraryError::Driver(err))?;
+        let state_view = RefCell::new(state_slice.slice_mut(..));
         let round = 0;
         let now = Instant::now();
         gpu_api_wrapper
@@ -269,7 +270,7 @@ mod tests {
                 &gpu_polys.slice(..),
                 buf_view.borrow_mut(),
                 &mut transcript_inner,
-                &state_slice,
+                state_view.borrow_mut(),
             )
             .map_err(|err| LibraryError::Driver(err))?;
         gpu_api_wrapper
@@ -332,9 +333,10 @@ mod tests {
             .copy_to_device(&polys.concat())
             .map_err(|err| LibraryError::Driver(err))?;
         let challenge = Fr::random(rng);
-        let gpu_challenge = gpu_api_wrapper
+        let mut gpu_challenge = gpu_api_wrapper
             .copy_to_device(&vec![challenge])
             .map_err(|err| LibraryError::Driver(err))?;
+        let challenge_view = RefCell::new(gpu_challenge.slice_mut(..));
         let round = 0;
 
         let count = 0;
@@ -351,7 +353,7 @@ mod tests {
                 num_polys,
                 &mut gpu_polys.slice_mut(..),
                 &mut transcript_inner,
-                &gpu_challenge,
+                challenge_view.borrow_mut(),
             )
             .map_err(|err| LibraryError::Driver(err))?;
         gpu_api_wrapper
@@ -421,7 +423,6 @@ mod tests {
                     "fold_into_half_in_place",
                     "combine",
                     "sum",
-                    "squeeze_challenge",
                 ],
             )
             .map_err(|err| LibraryError::Driver(err))?;
@@ -438,9 +439,6 @@ mod tests {
             .map_err(|err| LibraryError::Driver(err))?;
         let buf_view = RefCell::new(buf.slice_mut(..));
 
-        let mut challenges = gpu_api_wrapper
-            .malloc_on_device(num_vars)
-            .map_err(|err| LibraryError::Driver(err))?;
         let mut round_evals = gpu_api_wrapper
             .malloc_on_device(num_vars * (max_degree + 1))
             .map_err(|err| LibraryError::Driver(err))?;
@@ -451,9 +449,11 @@ mod tests {
         let add_len = num_vars * (max_degree + 1) * 32;
         let challenge = vec![Fr::zero()];
         let mut transcript = CudaKeccakTranscript::<Fr>::new(&Fr::zero());
-        let gpu_challenge = gpu_api_wrapper
+        let mut gpu_challenge = gpu_api_wrapper
             .copy_to_device(&challenge)
             .map_err(|err| LibraryError::Driver(err))?;
+        let challenge_view = RefCell::new(gpu_challenge.slice_mut(..));
+
         let mut transcript_inner =
             transcript.get_cuda_slice(&mut gpu_api_wrapper, count, add_len)?;
 
@@ -467,7 +467,7 @@ mod tests {
                 &mut gpu_polys.slice_mut(..),
                 buf_view,
                 &mut transcript_inner,
-                &gpu_challenge,
+                challenge_view,
             )
             .map_err(|err| LibraryError::Driver(err))?;
         gpu_api_wrapper

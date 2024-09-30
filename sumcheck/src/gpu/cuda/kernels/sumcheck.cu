@@ -37,6 +37,7 @@ extern "C" __global__ void sum(
         __syncthreads();
     }
     if (tid == 0) t.write_field_element(data[0]);
+    state[0] = data[0];
 }
 
 extern "C" __global__ void fold_into_half(

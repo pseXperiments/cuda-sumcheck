@@ -8,8 +8,8 @@ class Transcript {
     private:
         uint8_t* start;
         uint8_t* cursor;
-        fr state;
     public:
+        fr state;
         __device__ void init_transcript(uint8_t* start, uint8_t* cursor, fr* state);
         __device__ void write_field_element(fr fe);
         __device__ fr read_field_element();
