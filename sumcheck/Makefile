@@ -13,7 +13,7 @@ doc:
 check: build test
 
 test:
-	@$(CARGO) test --release
+	@$(CARGO) test --release -- --test-threads=1
 
 bench:
 	@$(CARGO) bench

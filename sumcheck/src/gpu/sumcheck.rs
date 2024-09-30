@@ -163,7 +163,6 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, time::Instant};
-
     use cudarc::nvrtc::Ptx;
     use ff::Field;
     use halo2curves::{bn256::Fr, serde::SerdeObject};
@@ -478,7 +477,6 @@ mod tests {
             "Time taken to prove sumcheck on gpu : {:.2?}",
             now.elapsed()
         );
-
         let transcript_device = gpu_api_wrapper
             .dtoh_sync_copy(
                 transcript_inner

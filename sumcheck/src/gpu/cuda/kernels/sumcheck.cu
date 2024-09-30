@@ -2,6 +2,7 @@
 #include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
 #include "../includes/transcript.cu"
 #include "./multilinear.cu"
+#include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
 
 using namespace bb;
 

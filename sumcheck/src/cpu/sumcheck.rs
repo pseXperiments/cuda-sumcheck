@@ -4,7 +4,6 @@ use ff::PrimeField;
 use itertools::Itertools;
 
 use crate::cpu::{arithmetic::barycentric_weights, parallel::parallelize};
-
 use super::super::transcript::*;
 use super::arithmetic::barycentric_interpolate;
 
