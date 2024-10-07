@@ -7,11 +7,11 @@ use cudarc::{
 use ff::PrimeField;
 
 use crate::{
-    fieldbinding::{FromFieldBinding, ToFieldBinding},
+    fieldbinding::FieldBindingConversion,
     GPUApiWrapper, MULTILINEAR_PTX,
 };
 
-impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
+impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
     pub fn eval(&mut self, num_vars: usize, evals: &[F], point: &[F]) -> Result<F, DriverError> {
         self.gpu.load_ptx(
             Ptx::from_src(MULTILINEAR_PTX),
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_eval() -> Result<(), DriverError> {
-        let num_vars = 20;
+        let num_vars = 25;
         let rng = OsRng::default();
         let evals = (0..1 << num_vars).map(|_| Fr::random(rng)).collect_vec();
         let point = (0..num_vars).map(|_| Fr::random(rng)).collect_vec();

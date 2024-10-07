@@ -6,7 +6,7 @@ use cudarc::driver::{
     CudaDevice, CudaSlice, CudaView, DeviceRepr, DriverError, LaunchAsync, LaunchConfig,
 };
 use ff::PrimeField;
-use fieldbinding::{FromFieldBinding, ToFieldBinding};
+use fieldbinding::FieldBindingConversion;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -30,12 +30,12 @@ const MULTILINEAR_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/multilinea
 const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"));
 
 /// Wrapper struct for APIs using GPU
-pub struct GPUApiWrapper<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> {
+pub struct GPUApiWrapper<F: PrimeField + FieldBindingConversion<F>> {
     gpu: Arc<CudaDevice>,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
+impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
     pub fn setup() -> Result<Self, DriverError> {
         // setup GPU device
         let now = Instant::now();

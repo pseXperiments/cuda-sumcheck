@@ -4,11 +4,11 @@ use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConf
 use ff::PrimeField;
 
 use crate::{
-    fieldbinding::{FromFieldBinding, ToFieldBinding},
+    fieldbinding::FieldBindingConversion,
     FieldBinding, GPUApiWrapper,
 };
 
-impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
+impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
     pub fn prove_sumcheck(
         &self,
         num_vars: usize,
@@ -58,8 +58,11 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         mut buf: RefMut<CudaViewMut<FieldBinding>>,
         mut round_evals: RefMut<CudaViewMut<FieldBinding>>,
     ) -> Result<(), DriverError> {
-        let num_blocks_per_poly = self.max_blocks_per_sm()? / num_polys * self.num_sm()?;
-        let num_threads_per_block = 1024;
+        let (num_blocks_per_poly, num_threads_per_block) = if initial_poly_num_vars - round <= 10 {
+            (1, 1 << (initial_poly_num_vars - round))
+        } else {
+            (self.max_blocks_per_sm()? / num_polys * self.num_sm()?, 512)
+        };
         for k in 0..max_degree + 1 {
             let fold_into_half = self.gpu.get_func("sumcheck", "fold_into_half").unwrap();
             let launch_config = LaunchConfig {
@@ -140,8 +143,11 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             .gpu
             .get_func("sumcheck", "fold_into_half_in_place")
             .unwrap();
-        let num_blocks_per_poly = self.max_blocks_per_sm()? / num_polys * self.num_sm()?;
-        let num_threads_per_block = 1024;
+        let (num_blocks_per_poly, num_threads_per_block) = if initial_poly_num_vars - round <= 10 {
+            (1, 1 << (initial_poly_num_vars - round))
+        } else {
+            (self.max_blocks_per_sm()? / num_polys * self.num_sm()?, 512)
+        };
         let launch_config = LaunchConfig {
             grid_dim: ((num_blocks_per_poly * num_polys) as u32, 1, 1),
             block_dim: (num_threads_per_block as u32, 1, 1),
@@ -167,13 +173,13 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 mod tests {
     use std::{cell::RefCell, time::Instant};
 
-    use cudarc::{driver::DriverError, nvrtc::Ptx};
+    use cudarc::{driver::{result::{event::{create, elapsed, record}, stream::wait_event}, sys, DriverError}, nvrtc::Ptx};
     use ff::Field;
     use halo2curves::bn256::Fr;
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
-    use crate::{cpu, fieldbinding::ToFieldBinding, GPUApiWrapper, MULTILINEAR_PTX, SUMCHECK_PTX};
+    use crate::{cpu, fieldbinding::FieldBindingConversion, GPUApiWrapper, MULTILINEAR_PTX, SUMCHECK_PTX};
 
     #[test]
     fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
@@ -349,9 +355,10 @@ mod tests {
 
     #[test]
     fn test_prove_sumcheck() -> Result<(), DriverError> {
-        let num_vars = 25;
-        let num_polys = 2;
-        let max_degree = 2;
+        let nowall = Instant::now();
+        let num_vars = 26;
+        let num_polys = 3;
+        let max_degree = 3;
 
         let rng = OsRng::default();
         let polys = (0..num_polys)
@@ -406,7 +413,10 @@ mod tests {
         let round_evals_view = RefCell::new(round_evals.slice_mut(..));
         println!("Time taken to copy data to device : {:.2?}", now.elapsed());
 
+        let start = create(sys::CUevent_flags::CU_EVENT_DEFAULT)?;
+        let stop = create(sys::CUevent_flags::CU_EVENT_DEFAULT)?;
         let now = Instant::now();
+        unsafe { record(start, *gpu_api_wrapper.gpu.cu_stream())?; }
         gpu_api_wrapper.prove_sumcheck(
             num_vars,
             num_polys,
@@ -421,7 +431,10 @@ mod tests {
             &mut challenges.slice_mut(..),
             round_evals_view,
         )?;
+        unsafe { record(stop, *gpu_api_wrapper.gpu.cu_stream())?; }
         gpu_api_wrapper.gpu.synchronize()?;
+        let res =  unsafe { elapsed(start, stop)? };
+        println!("Time taken to prove sumcheck by GPU timer : {:.2?}", res);
         println!(
             "Time taken to prove sumcheck on gpu : {:.2?}",
             now.elapsed()
@@ -448,6 +461,7 @@ mod tests {
             &round_evals[..],
         );
         assert!(result);
+        println!("Time taken to test : {:.2?}", nowall.elapsed());
         Ok(())
     }
 }

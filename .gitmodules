@@ -1,3 +1,6 @@
-[submodule "sumcheck/src/gpu/cuda/includes/barretenberg"]
-	path = sumcheck/src/gpu/cuda/includes/barretenberg
+[submodule "goldilocks"]
+	path = goldilocks/src/gpu/cuda/includes/goldilocks
+	url = https://github.com/pseXperiments/goldilocks.git
+[submodule "barretenberg_cuda"]
+	path = bn254/src/gpu/cuda/includes/barretenberg
 	url = https://github.com/pseXperiments/barretenberg_cuda.git

@@ -5,22 +5,18 @@ use halo2curves::{bn256::Fr, serde::SerdeObject};
 use itertools::Itertools;
 
 pub trait FieldBindingConversion<F> {
-    type FieldBinding: Copy + DeviceRepr + Send + Sync + Unpin;
+    fn from_canonical_form(b: FieldBinding) -> F;
 
-    fn from_canonical_form(b: Self::FieldBinding) -> F;
+    fn from_montgomery_form(b: FieldBinding) -> F;
 
-    fn from_montgomery_form(b: Self::FieldBinding) -> F;
+    fn to_canonical_form(f: F) -> FieldBinding;
 
-    fn to_canonical_form(f: F) -> Self::FieldBinding;
-
-    fn to_montgomery_form(f: F) -> Self::FieldBinding;
+    fn to_montgomery_form(f: F) -> FieldBinding;
 }
 
 macro_rules! field_binding_conversion_impl {
     ($field:ident, $field_binding:ident) => {
         impl FieldBindingConversion<$field> for $field {
-            type FieldBinding = $field_binding;
-
             fn from_canonical_form(b: FieldBinding) -> $field {
                 $field::from_raw(b.data)
             }
@@ -65,5 +61,4 @@ macro_rules! field_binding_conversion_impl {
     };
 }
 
-#[cfg(feature = "bn254")]
 field_binding_conversion_impl!(Fr, FieldBinding);
