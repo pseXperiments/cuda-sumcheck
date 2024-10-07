@@ -1,8 +1,10 @@
+use std::io::Cursor;
+
 use ff::PrimeField;
 use itertools::Itertools;
 
 use crate::cpu::{arithmetic::barycentric_weights, parallel::parallelize};
-
+use super::super::transcript::*;
 use super::arithmetic::barycentric_interpolate;
 
 pub(crate) fn eval_at_k_and_combine<F: PrimeField>(
@@ -36,24 +38,35 @@ pub(crate) fn fold_into_half_in_place<F: PrimeField>(poly: &mut [F], challenge: 
     });
 }
 
-pub(crate) fn verify_sumcheck<F: PrimeField>(
+pub(crate) fn verify_sumcheck<F: PrimeField + halo2curves::serde::SerdeObject>(
     num_vars: usize,
     max_degree: usize,
     sum: F,
-    challenges: &[F],
-    evals: &[&[F]],
+    transcript: Vec<u8>,
 ) -> bool {
+    let stream = Cursor::new(transcript);
+    let mut transcript = CudaKeccakTranscript {
+        stream,
+        state: F::ZERO,
+        inner: None,
+    };
     let points_vec: Vec<F> = (0..max_degree + 1)
         .map(|i| F::from_u128(i as u128))
         .collect();
     let weights = barycentric_weights(&points_vec);
     let mut expected_sum = sum;
     for round_index in 0..num_vars {
-        if evals[round_index].len() != max_degree + 1 {
+        let evals: Vec<F> = transcript
+            .read_field_elements(max_degree + 1)
+            .unwrap()
+            .chunks(32)
+            .map(|e| from_u8_to_f::<F>(e))
+            .collect_vec();
+        if evals.len() != max_degree + 1 {
             return false;
         }
-        let round_poly_eval_at_0 = evals[round_index][0];
-        let round_poly_eval_at_1 = evals[round_index][1];
+        let round_poly_eval_at_0 = evals[0];
+        let round_poly_eval_at_1 = evals[1];
         let computed_sum = round_poly_eval_at_0 + round_poly_eval_at_1;
 
         // Check r_{i}(α_i) == r_{i+1}(0) + r_{i+1}(1)
@@ -64,12 +77,14 @@ pub(crate) fn verify_sumcheck<F: PrimeField>(
             return false;
         }
 
+        let challenge = transcript.squeeze_challenge();
+
         // Compute r_{i}(α_i) using barycentric interpolation
         expected_sum = barycentric_interpolate(
             &weights,
             &points_vec,
-            evals[round_index],
-            &challenges[round_index],
+            &evals,
+            &challenge,
         );
     }
     true

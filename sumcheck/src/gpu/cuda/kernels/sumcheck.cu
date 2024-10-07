@@ -1,3 +1,7 @@
+#include <stdint.h>
+#include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
+#include "../includes/transcript.cu"
+#include "./multilinear.cu"
 #include "../includes/barretenberg/ecc/curves/bn254/fr.cuh"
 
 using namespace bb;
@@ -18,7 +22,12 @@ extern "C" __global__ void combine(fr* buf, unsigned int size, unsigned int num_
     }
 }
 
-extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsigned int index) {
+extern "C" __global__ void sum(
+    fr* data, unsigned int stride, unsigned int index,
+    uint8_t* start_transcript, uint8_t* cursor_transcript, fr* state
+) {
+    Transcript t;
+    t.init_transcript(start_transcript, cursor_transcript, state);
     const int tid = threadIdx.x;
     for (unsigned int s = stride; s > 0; s >>= 1) {
         int idx = tid;
@@ -28,40 +37,38 @@ extern "C" __global__ void sum(fr* data, fr* result, unsigned int stride, unsign
         }
         __syncthreads();
     }
-    if (tid == 0) result[index] = data[0];
+    if (tid == 0) t.write_field_element(data[0]);
+    state[0] = data[0];
 }
 
 extern "C" __global__ void fold_into_half(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* challenge
-) {
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* buf, fr* eval_point) 
+{
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
     const int stride = 1 << (num_vars - 1);
     const int buf_offset = (blockIdx.x / num_blocks_per_poly) * stride;
     const int poly_offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
     while (tid < stride) {
-        if (*challenge == fr::zero()) buf[buf_offset + tid] = polys[poly_offset + tid];
-        else if (*challenge == fr::one()) buf[buf_offset + tid] = polys[poly_offset + tid + stride];
-        else buf[buf_offset + tid] = (*challenge) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
+        if (*eval_point == fr::zero()) buf[buf_offset + tid] = polys[poly_offset + tid];
+        else if (*eval_point == fr::one()) buf[buf_offset + tid] = polys[poly_offset + tid + stride];
+        else buf[buf_offset + tid] = (*eval_point) * (polys[poly_offset + tid + stride] - polys[poly_offset + tid]) + polys[poly_offset + tid];
         tid += blockDim.x * num_blocks_per_poly;
     }
 }
 
 extern "C" __global__ void fold_into_half_in_place(
-    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys, fr* challenge
-) {
+    unsigned int num_vars, unsigned int initial_poly_size, unsigned int num_blocks_per_poly, fr* polys,
+    uint8_t* start_transcript, uint8_t* cursor_transcript, fr* state)
+{
     int tid = (blockIdx.x % num_blocks_per_poly) * blockDim.x + threadIdx.x;
+    Transcript t;
+    t.init_transcript(start_transcript, cursor_transcript, state);
     const int stride = 1 << (num_vars - 1);
     const int offset = (blockIdx.x / num_blocks_per_poly) * initial_poly_size;
+    fr challenge = t.squeeze_challenge();
     while (tid < stride) {
         int idx = offset + tid;
-        polys[idx] = (*challenge) * (polys[idx + stride] - polys[idx]) + polys[idx];
+        polys[idx] = (challenge) * (polys[idx + stride] - polys[idx]) + polys[idx];
         tid += blockDim.x * num_blocks_per_poly;
-    }
-}
-
-// TODO : Pass transcript and squeeze random challenge using hash function
-extern "C" __global__ void squeeze_challenge(fr* challenges, unsigned int index) {
-    if (threadIdx.x == 0) {
-        challenges[index] = fr(1034);
     }
 }
