@@ -38,46 +38,7 @@ pub(crate) fn fold_into_half_in_place<F: PrimeField>(poly: &mut [F], challenge: 
     });
 }
 
-pub(crate) fn verify_sumcheck<F: PrimeField>(
-    num_vars: usize,
-    max_degree: usize,
-    sum: F,
-    challenges: &[F],
-    evals: &[&[F]],
-) -> bool {
-    let points_vec: Vec<F> = (0..max_degree + 1)
-        .map(|i| F::from_u128(i as u128))
-        .collect();
-    let weights = barycentric_weights(&points_vec);
-    let mut expected_sum = sum;
-    for round_index in 0..num_vars {
-        if evals[round_index].len() != max_degree + 1 {
-            return false;
-        }
-        let round_poly_eval_at_0 = evals[round_index][0];
-        let round_poly_eval_at_1 = evals[round_index][1];
-        let computed_sum = round_poly_eval_at_0 + round_poly_eval_at_1;
-
-        // Check r_{i}(α_i) == r_{i+1}(0) + r_{i+1}(1)
-        if computed_sum != expected_sum {
-            println!("computed_sum : {:?}", computed_sum);
-            println!("expected_sum : {:?}", expected_sum);
-            println!("round index : {}", round_index);
-            return false;
-        }
-
-        // Compute r_{i}(α_i) using barycentric interpolation
-        expected_sum = barycentric_interpolate(
-            &weights,
-            &points_vec,
-            evals[round_index],
-            &challenges[round_index],
-        );
-    }
-    true
-}
-
-pub(crate) fn verify_sumcheck_transcript<F: PrimeField + halo2curves::serde::SerdeObject>(
+pub(crate) fn verify_sumcheck<F: PrimeField + halo2curves::serde::SerdeObject>(
     num_vars: usize,
     max_degree: usize,
     sum: F,

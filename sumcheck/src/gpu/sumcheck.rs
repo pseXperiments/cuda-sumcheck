@@ -485,7 +485,7 @@ mod tests {
             )
             .map_err(|err| LibraryError::Driver(err))?;
 
-        let result = cpu::sumcheck::verify_sumcheck_transcript(
+        let result = cpu::sumcheck::verify_sumcheck(
             num_vars,
             max_degree,
             sum,
