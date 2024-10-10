@@ -57,12 +57,8 @@ pub(crate) fn verify_sumcheck<E: ExtensionField>(
     if sum != computed_sum {
         return false;
     }
-    let mut expected_sum = barycentric_interpolate::<E>(
-        &weights,
-        &points_vec,
-        evals[0],
-        &challenges[0],
-    );
+    let mut expected_sum =
+        barycentric_interpolate::<E>(&weights, &points_vec, evals[0], &challenges[0]);
     // round 1..num_vars
     for round_index in 1..num_vars {
         if evals[round_index].len() != max_degree + 1 {

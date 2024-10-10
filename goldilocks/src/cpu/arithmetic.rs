@@ -42,9 +42,17 @@ pub fn inner_product<'a, 'b, F: Field>(
         .unwrap_or_default()
 }
 
-pub fn barycentric_interpolate<E: ExtensionField>(weights: &[E], points: &[E::BaseField], evals: &[E], x: &E) -> E {
+pub fn barycentric_interpolate<E: ExtensionField>(
+    weights: &[E],
+    points: &[E::BaseField],
+    evals: &[E],
+    x: &E,
+) -> E {
     let (coeffs, sum_inv) = {
-        let mut coeffs = points.iter().map(|point| *x - E::from_base(point)).collect_vec();
+        let mut coeffs = points
+            .iter()
+            .map(|point| *x - E::from_base(point))
+            .collect_vec();
         coeffs.batch_invert();
         coeffs.iter_mut().zip(weights).for_each(|(coeff, weight)| {
             *coeff *= weight;

@@ -4,7 +4,6 @@
 use std::{marker::PhantomData, sync::Arc, time::Instant};
 
 use cudarc::driver::{CudaDevice, CudaSlice, CudaView, DeviceRepr, DriverError};
-use ff::{Field, PrimeField};
 use goldilocks::ExtensionField;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -32,8 +31,7 @@ impl Default for QuadraticExtFieldBinding {
 const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"));
 
 /// Struct for GPU sumcheck prover
-pub struct GPUSumcheckProver<E>
-{
+pub struct GPUSumcheckProver<E> {
     gpu: Arc<CudaDevice>,
     _marker: PhantomData<E>,
 }
@@ -41,7 +39,7 @@ pub struct GPUSumcheckProver<E>
 impl<E> GPUSumcheckProver<E>
 where
     E: ExtensionField + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
-    E::BaseField: From<FieldBinding> + Into<FieldBinding>
+    E::BaseField: From<FieldBinding> + Into<FieldBinding>,
 {
     pub fn setup() -> Result<Self, DriverError> {
         // setup GPU device

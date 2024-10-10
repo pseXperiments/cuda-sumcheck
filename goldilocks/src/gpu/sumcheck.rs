@@ -8,7 +8,7 @@ use crate::{FieldBinding, GPUSumcheckProver, QuadraticExtFieldBinding};
 impl<E> GPUSumcheckProver<E>
 where
     E: ExtensionField + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
-    E::BaseField: From<FieldBinding> + Into<FieldBinding>
+    E::BaseField: From<FieldBinding> + Into<FieldBinding>,
 {
     pub fn prove_sumcheck(
         &self,
@@ -176,10 +176,7 @@ mod tests {
 
     use cudarc::{
         driver::{
-            result::{
-                event::{create, elapsed, record},
-                stream::wait_event,
-            },
+            result::event::{create, elapsed, record},
             sys, DriverError,
         },
         nvrtc::Ptx,
@@ -238,7 +235,8 @@ mod tests {
         );
 
         // copy polynomials to device
-        let gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat().into_iter().map(|b| b.into()).collect_vec())?;
+        let gpu_polys = gpu_api_wrapper
+            .copy_exts_to_device(&polys.concat().into_iter().map(|b| b.into()).collect_vec())?;
         let device_ks = (0..max_degree + 1)
             .map(|k| {
                 gpu_api_wrapper
@@ -388,9 +386,14 @@ mod tests {
 
         let now = Instant::now();
         let mut gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat())?;
-        let sum = (0..1 << num_vars).fold(GoldilocksExt2::ZERO, |acc, index| {
-            acc + polys.iter().map(|poly| poly[index]).product::<GoldilocksExt2>()
-        }).to_limbs()[0];
+        let sum = (0..1 << num_vars)
+            .fold(GoldilocksExt2::ZERO, |acc, index| {
+                acc + polys
+                    .iter()
+                    .map(|poly| poly[index])
+                    .product::<GoldilocksExt2>()
+            })
+            .to_limbs()[0];
         let device_ks = (0..max_degree + 1)
             .map(|k| {
                 gpu_api_wrapper
