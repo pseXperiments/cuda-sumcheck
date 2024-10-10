@@ -3,10 +3,7 @@ use std::cell::{RefCell, RefMut};
 use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
 use ff::PrimeField;
 
-use crate::{
-    fieldbinding::FieldBindingConversion,
-    FieldBinding, GPUApiWrapper,
-};
+use crate::{fieldbinding::FieldBindingConversion, FieldBinding, GPUApiWrapper};
 
 impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
     pub fn prove_sumcheck(
@@ -173,13 +170,24 @@ impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
 mod tests {
     use std::{cell::RefCell, time::Instant};
 
-    use cudarc::{driver::{result::{event::{create, elapsed, record}, stream::wait_event}, sys, DriverError}, nvrtc::Ptx};
+    use cudarc::{
+        driver::{
+            result::{
+                event::{create, elapsed, record},
+                stream::wait_event,
+            },
+            sys, DriverError,
+        },
+        nvrtc::Ptx,
+    };
     use ff::Field;
     use halo2curves::bn256::Fr;
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
-    use crate::{cpu, fieldbinding::FieldBindingConversion, GPUApiWrapper, MULTILINEAR_PTX, SUMCHECK_PTX};
+    use crate::{
+        cpu, fieldbinding::FieldBindingConversion, GPUApiWrapper, MULTILINEAR_PTX, SUMCHECK_PTX,
+    };
 
     #[test]
     fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
@@ -416,7 +424,9 @@ mod tests {
         let start = create(sys::CUevent_flags::CU_EVENT_DEFAULT)?;
         let stop = create(sys::CUevent_flags::CU_EVENT_DEFAULT)?;
         let now = Instant::now();
-        unsafe { record(start, *gpu_api_wrapper.gpu.cu_stream())?; }
+        unsafe {
+            record(start, *gpu_api_wrapper.gpu.cu_stream())?;
+        }
         gpu_api_wrapper.prove_sumcheck(
             num_vars,
             num_polys,
@@ -431,9 +441,11 @@ mod tests {
             &mut challenges.slice_mut(..),
             round_evals_view,
         )?;
-        unsafe { record(stop, *gpu_api_wrapper.gpu.cu_stream())?; }
+        unsafe {
+            record(stop, *gpu_api_wrapper.gpu.cu_stream())?;
+        }
         gpu_api_wrapper.gpu.synchronize()?;
-        let res =  unsafe { elapsed(start, stop)? };
+        let res = unsafe { elapsed(start, stop)? };
         println!("Time taken to prove sumcheck by GPU timer : {:.2?}", res);
         println!(
             "Time taken to prove sumcheck on gpu : {:.2?}",

@@ -6,10 +6,7 @@ use cudarc::{
 };
 use ff::PrimeField;
 
-use crate::{
-    fieldbinding::FieldBindingConversion,
-    GPUApiWrapper, MULTILINEAR_PTX,
-};
+use crate::{fieldbinding::FieldBindingConversion, GPUApiWrapper, MULTILINEAR_PTX};
 
 impl<F: PrimeField + FieldBindingConversion<F>> GPUApiWrapper<F> {
     pub fn eval(&mut self, num_vars: usize, evals: &[F], point: &[F]) -> Result<F, DriverError> {
