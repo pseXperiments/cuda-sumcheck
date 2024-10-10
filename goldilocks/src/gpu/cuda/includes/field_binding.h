@@ -7,4 +7,8 @@ struct FieldBinding {
     uint64_t data;
 };
 
+struct QuadraticExtFieldBinding {
+    uint64_t data[2];
+};
+
 #endif
