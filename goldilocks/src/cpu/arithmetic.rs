@@ -1,4 +1,5 @@
 use ff::{BatchInvert, Field};
+use goldilocks::ExtensionField;
 use itertools::Itertools;
 use num_integer::Integer;
 
@@ -12,7 +13,7 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
     Integer::div_ceil(&dividend, &divisor)
 }
 
-pub fn barycentric_weights<F: Field>(points: &[F]) -> Vec<F> {
+pub fn barycentric_weights<E: ExtensionField>(points: &[E::BaseField]) -> Vec<E> {
     let mut weights = points
         .iter()
         .enumerate()
@@ -21,9 +22,9 @@ pub fn barycentric_weights<F: Field>(points: &[F]) -> Vec<F> {
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| i != &j)
-                .map(|(_, point_i)| *point_j - point_i)
+                .map(|(_, point_i)| E::from_base(&(*point_j - point_i)))
                 .reduce(|acc, value| acc * &value)
-                .unwrap_or(F::ONE)
+                .unwrap_or(E::ONE)
         })
         .collect_vec();
     weights.batch_invert();
@@ -41,14 +42,14 @@ pub fn inner_product<'a, 'b, F: Field>(
         .unwrap_or_default()
 }
 
-pub fn barycentric_interpolate<F: Field>(weights: &[F], points: &[F], evals: &[F], x: &F) -> F {
+pub fn barycentric_interpolate<E: ExtensionField>(weights: &[E], points: &[E::BaseField], evals: &[E], x: &E) -> E {
     let (coeffs, sum_inv) = {
-        let mut coeffs = points.iter().map(|point| *x - point).collect_vec();
+        let mut coeffs = points.iter().map(|point| *x - E::from_base(point)).collect_vec();
         coeffs.batch_invert();
         coeffs.iter_mut().zip(weights).for_each(|(coeff, weight)| {
             *coeff *= weight;
         });
-        let sum_inv = coeffs.iter().fold(F::ZERO, |sum, coeff| sum + coeff);
+        let sum_inv = coeffs.iter().fold(E::ZERO, |sum, coeff| sum + coeff);
         (coeffs, sum_inv.invert().unwrap())
     };
     inner_product(&coeffs, evals) * &sum_inv

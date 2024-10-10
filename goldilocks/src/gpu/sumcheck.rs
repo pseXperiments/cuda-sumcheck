@@ -1,26 +1,26 @@
 use std::cell::{RefCell, RefMut};
 
 use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
-use ff::{Field, PrimeField};
+use goldilocks::ExtensionField;
 
 use crate::{FieldBinding, GPUSumcheckProver, QuadraticExtFieldBinding};
 
-impl<F, E> GPUSumcheckProver<F, E>
+impl<E> GPUSumcheckProver<E>
 where
-    F: PrimeField + From<FieldBinding> + Into<FieldBinding>,
-    E: Field + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+    E: ExtensionField + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+    E::BaseField: From<FieldBinding> + Into<FieldBinding>
 {
     pub fn prove_sumcheck(
         &self,
         num_vars: usize,
         num_polys: usize,
         max_degree: usize,
-        sum: F,
-        polys: &mut CudaViewMut<FieldBinding>,
+        sum: E::BaseField,
+        polys: &mut CudaViewMut<QuadraticExtFieldBinding>,
         device_ks: &[CudaView<FieldBinding>],
-        buf: RefCell<CudaViewMut<FieldBinding>>,
-        challenges: &mut CudaViewMut<FieldBinding>,
-        round_evals: RefCell<CudaViewMut<FieldBinding>>,
+        buf: RefCell<CudaViewMut<QuadraticExtFieldBinding>>,
+        challenges: &mut CudaViewMut<QuadraticExtFieldBinding>,
+        round_evals: RefCell<CudaViewMut<QuadraticExtFieldBinding>>,
     ) -> Result<(), DriverError> {
         let initial_poly_num_vars = num_vars;
         for round in 0..num_vars {
@@ -54,10 +54,10 @@ where
         round: usize,
         max_degree: usize,
         num_polys: usize,
-        polys: &CudaView<FieldBinding>,
+        polys: &CudaView<QuadraticExtFieldBinding>,
         device_ks: &[CudaView<FieldBinding>],
-        mut buf: RefMut<CudaViewMut<FieldBinding>>,
-        mut round_evals: RefMut<CudaViewMut<FieldBinding>>,
+        mut buf: RefMut<CudaViewMut<QuadraticExtFieldBinding>>,
+        mut round_evals: RefMut<CudaViewMut<QuadraticExtFieldBinding>>,
     ) -> Result<(), DriverError> {
         let (num_blocks_per_poly, num_threads_per_block) = if initial_poly_num_vars - round <= 10 {
             (1, 1 << (initial_poly_num_vars - round))
@@ -118,7 +118,7 @@ where
     pub(crate) fn squeeze_challenge(
         &self,
         round: usize,
-        challenges: &mut CudaViewMut<FieldBinding>,
+        challenges: &mut CudaViewMut<QuadraticExtFieldBinding>,
     ) -> Result<(), DriverError> {
         let squeeze_challenge = self.gpu.get_func("sumcheck", "squeeze_challenge").unwrap();
         let launch_config = LaunchConfig {
@@ -137,8 +137,8 @@ where
         initial_poly_num_vars: usize,
         round: usize,
         num_polys: usize,
-        polys: &mut CudaViewMut<FieldBinding>,
-        challenge: &CudaView<FieldBinding>,
+        polys: &mut CudaViewMut<QuadraticExtFieldBinding>,
+        challenge: &CudaView<QuadraticExtFieldBinding>,
     ) -> Result<(), DriverError> {
         let fold_into_half_in_place = self
             .gpu
@@ -185,7 +185,7 @@ mod tests {
         nvrtc::Ptx,
     };
     use ff::Field;
-    use goldilocks::{Goldilocks, GoldilocksExt2};
+    use goldilocks::{ExtensionField, Goldilocks, GoldilocksExt2};
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
@@ -198,23 +198,23 @@ mod tests {
         let max_degree = 3;
         let rng = OsRng::default();
 
-        let combine_function = |args: &Vec<Goldilocks>| args.iter().product();
+        let combine_function = |args: &Vec<GoldilocksExt2>| args.iter().product();
 
         let polys = (0..num_polys)
             .map(|_| {
                 (0..1 << num_vars)
                     .map(|i| {
                         if i < 1024 {
-                            Goldilocks::random(rng)
+                            GoldilocksExt2::from_base(&Goldilocks::random(rng))
                         } else {
-                            Goldilocks::from(i)
+                            GoldilocksExt2::from_base(&Goldilocks::from(i))
                         }
                     })
                     .collect_vec()
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks, GoldilocksExt2>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<GoldilocksExt2>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
@@ -238,7 +238,7 @@ mod tests {
         );
 
         // copy polynomials to device
-        let gpu_polys = gpu_api_wrapper.copy_to_device(&polys.concat())?;
+        let gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat().into_iter().map(|b| b.into()).collect_vec())?;
         let device_ks = (0..max_degree + 1)
             .map(|k| {
                 gpu_api_wrapper
@@ -292,25 +292,25 @@ mod tests {
                 (0..1 << num_vars)
                     .map(|i| {
                         if i < 1024 {
-                            Goldilocks::random(rng)
+                            GoldilocksExt2::from_base(&Goldilocks::random(rng))
                         } else {
-                            Goldilocks::from(i)
+                            GoldilocksExt2::from_base(&Goldilocks::from(i))
                         }
                     })
                     .collect_vec()
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks, GoldilocksExt2>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<GoldilocksExt2>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
             &["fold_into_half_in_place"],
         )?;
         // copy polynomials to device
-        let mut gpu_polys = gpu_api_wrapper.copy_to_device(&polys.concat())?;
-        let challenge = Goldilocks::random(rng);
-        let gpu_challenge = gpu_api_wrapper.copy_to_device(&vec![challenge])?;
+        let mut gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat())?;
+        let challenge = GoldilocksExt2::from_base(&Goldilocks::random(rng));
+        let gpu_challenge = gpu_api_wrapper.copy_exts_to_device(&vec![challenge])?;
         let round = 0;
 
         let now = Instant::now();
@@ -331,7 +331,7 @@ mod tests {
                 gpu_api_wrapper
                     .dtoh_sync_copy(&gpu_polys.slice(i << num_vars..(i * 2 + 1) << (num_vars - 1)))
             })
-            .collect::<Result<Vec<Vec<Goldilocks>>, _>>()?;
+            .collect::<Result<Vec<Vec<GoldilocksExt2>>, _>>()?;
 
         let now = Instant::now();
         (0..num_polys)
@@ -364,16 +364,16 @@ mod tests {
                 (0..1 << num_vars)
                     .map(|i| {
                         if i < 1024 {
-                            Goldilocks::random(rng)
+                            GoldilocksExt2::from_base(&Goldilocks::random(rng))
                         } else {
-                            Goldilocks::from(i)
+                            GoldilocksExt2::from_base(&Goldilocks::from(i))
                         }
                     })
                     .collect_vec()
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks, GoldilocksExt2>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<GoldilocksExt2>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
@@ -387,10 +387,10 @@ mod tests {
         )?;
 
         let now = Instant::now();
-        let mut gpu_polys = gpu_api_wrapper.copy_to_device(&polys.concat())?;
-        let sum = (0..1 << num_vars).fold(Goldilocks::ZERO, |acc, index| {
-            acc + polys.iter().map(|poly| poly[index]).product::<Goldilocks>()
-        });
+        let mut gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat())?;
+        let sum = (0..1 << num_vars).fold(GoldilocksExt2::ZERO, |acc, index| {
+            acc + polys.iter().map(|poly| poly[index]).product::<GoldilocksExt2>()
+        }).to_limbs()[0];
         let device_ks = (0..max_degree + 1)
             .map(|k| {
                 gpu_api_wrapper
@@ -444,7 +444,7 @@ mod tests {
                     &round_evals.slice(i * (max_degree + 1)..(i + 1) * (max_degree + 1)),
                 )
             })
-            .collect::<Result<Vec<Vec<Goldilocks>>, _>>()?;
+            .collect::<Result<Vec<Vec<GoldilocksExt2>>, _>>()?;
         let round_evals = round_evals
             .iter()
             .map(|round_evals| round_evals.as_slice())

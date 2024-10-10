@@ -5,6 +5,7 @@ use std::{marker::PhantomData, sync::Arc, time::Instant};
 
 use cudarc::driver::{CudaDevice, CudaSlice, CudaView, DeviceRepr, DriverError};
 use ff::{Field, PrimeField};
+use goldilocks::ExtensionField;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -31,21 +32,16 @@ impl Default for QuadraticExtFieldBinding {
 const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"));
 
 /// Struct for GPU sumcheck prover
-/// TODO : Express trait bound on `E` and `F`
-pub struct GPUSumcheckProver<F, E>
-where
-    F: PrimeField + From<FieldBinding> + Into<FieldBinding>,
-    E: Field + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+pub struct GPUSumcheckProver<E>
 {
     gpu: Arc<CudaDevice>,
-    _marker: PhantomData<F>,
-    _marker2: PhantomData<E>,
+    _marker: PhantomData<E>,
 }
 
-impl<F, E> GPUSumcheckProver<F, E>
+impl<E> GPUSumcheckProver<E>
 where
-    F: PrimeField + From<FieldBinding> + Into<FieldBinding>,
-    E: Field + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+    E: ExtensionField + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+    E::BaseField: From<FieldBinding> + Into<FieldBinding>
 {
     pub fn setup() -> Result<Self, DriverError> {
         // setup GPU device
@@ -55,13 +51,12 @@ where
         Ok(Self {
             gpu,
             _marker: PhantomData,
-            _marker2: PhantomData,
         })
     }
 
     pub fn copy_to_device(
         &mut self,
-        host_data: &[F],
+        host_data: &[E::BaseField],
     ) -> Result<CudaSlice<FieldBinding>, DriverError> {
         let device_data = self
             .gpu
@@ -69,15 +64,25 @@ where
         Ok(device_data)
     }
 
-    pub fn malloc_on_device(&self, len: usize) -> Result<CudaSlice<FieldBinding>, DriverError> {
-        let device_ptr = unsafe { self.gpu.alloc::<FieldBinding>(len)? };
+    pub fn copy_exts_to_device(
+        &mut self,
+        host_data: &[E],
+    ) -> Result<CudaSlice<QuadraticExtFieldBinding>, DriverError> {
+        let device_data = self
+            .gpu
+            .htod_copy(host_data.into_par_iter().map(|&eval| eval.into()).collect())?;
+        Ok(device_data)
+    }
+
+    pub fn malloc_on_device<T: DeviceRepr>(&self, len: usize) -> Result<CudaSlice<T>, DriverError> {
+        let device_ptr = unsafe { self.gpu.alloc::<T>(len)? };
         Ok(device_ptr)
     }
 
     pub fn dtoh_sync_copy(
         &self,
-        device_data: &CudaView<FieldBinding>,
-    ) -> Result<Vec<F>, DriverError> {
+        device_data: &CudaView<QuadraticExtFieldBinding>,
+    ) -> Result<Vec<E>, DriverError> {
         let host_data = self.gpu.dtoh_sync_copy(device_data)?;
         Ok(host_data.into_iter().map(|b| b.into()).collect_vec())
     }
