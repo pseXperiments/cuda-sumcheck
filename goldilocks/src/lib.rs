@@ -3,10 +3,8 @@
 
 use std::{marker::PhantomData, sync::Arc, time::Instant};
 
-use cudarc::driver::{
-    CudaDevice, CudaSlice, CudaView, DeviceRepr, DriverError, LaunchAsync, LaunchConfig,
-};
-use ff::PrimeField;
+use cudarc::driver::{CudaDevice, CudaSlice, CudaView, DeviceRepr, DriverError};
+use ff::{Field, PrimeField};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -23,15 +21,32 @@ impl Default for FieldBinding {
     }
 }
 
+unsafe impl DeviceRepr for QuadraticExtFieldBinding {}
+impl Default for QuadraticExtFieldBinding {
+    fn default() -> Self {
+        Self { data: [0; 2] }
+    }
+}
+
 const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"));
 
 /// Struct for GPU sumcheck prover
-pub struct GPUSumcheckProver<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> {
+/// TODO : Express trait bound on `E` and `F`
+pub struct GPUSumcheckProver<F, E>
+where
+    F: PrimeField + From<FieldBinding> + Into<FieldBinding>,
+    E: Field + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+{
     gpu: Arc<CudaDevice>,
     _marker: PhantomData<F>,
+    _marker2: PhantomData<E>,
 }
 
-impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUSumcheckProver<F> {
+impl<F, E> GPUSumcheckProver<F, E>
+where
+    F: PrimeField + From<FieldBinding> + Into<FieldBinding>,
+    E: Field + From<QuadraticExtFieldBinding> + Into<QuadraticExtFieldBinding>,
+{
     pub fn setup() -> Result<Self, DriverError> {
         // setup GPU device
         let now = Instant::now();
@@ -40,6 +55,7 @@ impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUSumcheckProver<
         Ok(Self {
             gpu,
             _marker: PhantomData,
+            _marker2: PhantomData,
         })
     }
 
