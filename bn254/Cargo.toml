@@ -1,21 +1,18 @@
 [package]
 name = "bn254"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib", "rlib"]
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-cudarc = { version = "0.11.3", features = ["cuda-version-from-build-system"] }
-ff = "0.13.0"
-rayon = "1.8"
-itertools = "0.10.5"
-halo2curves = "0.1.0"
-rand = "0.8"
-num-integer = "0.1.45"
+cudarc.workspace = true
+ff.workspace = true
+rayon.workspace = true
+itertools.workspace = true
+halo2curves.workspace = true
+rand.workspace = true
+num-integer.workspace = true
 
 [build-dependencies]
-bindgen = "0.66.1"
-cc = "1.0.82"
-regex = "1.9.3"
+bindgen.workspace = true
+cc.workspace = true
+regex.workspace = true
