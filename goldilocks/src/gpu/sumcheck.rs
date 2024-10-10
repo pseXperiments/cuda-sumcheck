@@ -3,9 +3,9 @@ use std::cell::{RefCell, RefMut};
 use cudarc::driver::{CudaView, CudaViewMut, DriverError, LaunchAsync, LaunchConfig};
 use ff::PrimeField;
 
-use crate::{FieldBinding, GPUApiWrapper};
+use crate::{FieldBinding, GPUSumcheckProver};
 
-impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUApiWrapper<F> {
+impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUSumcheckProver<F> {
     pub fn prove_sumcheck(
         &self,
         num_vars: usize,
@@ -185,7 +185,7 @@ mod tests {
     use itertools::Itertools;
     use rand::rngs::OsRng;
 
-    use crate::{cpu, GPUApiWrapper, SUMCHECK_PTX};
+    use crate::{cpu, GPUSumcheckProver, SUMCHECK_PTX};
 
     #[test]
     fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
@@ -210,7 +210,7 @@ mod tests {
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUApiWrapper::<Goldilocks>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
@@ -297,7 +297,7 @@ mod tests {
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUApiWrapper::<Goldilocks>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
@@ -369,7 +369,7 @@ mod tests {
             })
             .collect_vec();
 
-        let mut gpu_api_wrapper = GPUApiWrapper::<Goldilocks>::setup()?;
+        let mut gpu_api_wrapper = GPUSumcheckProver::<Goldilocks>::setup()?;
         gpu_api_wrapper.gpu.load_ptx(
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",

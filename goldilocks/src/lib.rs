@@ -25,13 +25,13 @@ impl Default for FieldBinding {
 
 const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"));
 
-/// Wrapper struct for APIs using GPU
-pub struct GPUApiWrapper<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> {
+/// Struct for GPU sumcheck prover
+pub struct GPUSumcheckProver<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> {
     gpu: Arc<CudaDevice>,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUApiWrapper<F> {
+impl<F: PrimeField + From<FieldBinding> + Into<FieldBinding>> GPUSumcheckProver<F> {
     pub fn setup() -> Result<Self, DriverError> {
         // setup GPU device
         let now = Instant::now();
