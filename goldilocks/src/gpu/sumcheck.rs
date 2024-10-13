@@ -59,25 +59,28 @@ where
         mut buf: RefMut<CudaViewMut<QuadraticExtFieldBinding>>,
         mut round_evals: RefMut<CudaViewMut<QuadraticExtFieldBinding>>,
     ) -> Result<(), DriverError> {
-        let (num_blocks_per_poly, num_threads_per_block) = if initial_poly_num_vars - round <= 10 {
+        let (num_blocks, num_threads_per_block) = if initial_poly_num_vars - round <= 10 {
             (1, 1 << (initial_poly_num_vars - round))
         } else {
-            (self.max_blocks_per_sm()? / num_polys * self.num_sm()?, 512)
+            (self.max_blocks_per_sm()? * self.num_sm()?, 1024)
         };
         for k in 0..max_degree + 1 {
-            let fold_into_half = self.gpu.get_func("sumcheck", "fold_into_half").unwrap();
+            let eval_at_k_and_product = self
+                .gpu
+                .get_func("sumcheck", "eval_at_k_and_product")
+                .unwrap();
             let launch_config = LaunchConfig {
-                grid_dim: ((num_blocks_per_poly * num_polys) as u32, 1, 1),
+                grid_dim: (num_blocks as u32, 1, 1),
                 block_dim: (num_threads_per_block as u32, 1, 1),
                 shared_mem_bytes: 0,
             };
             unsafe {
-                fold_into_half.launch(
+                eval_at_k_and_product.launch(
                     launch_config,
                     (
                         initial_poly_num_vars - round,
                         1 << initial_poly_num_vars,
-                        num_blocks_per_poly,
+                        num_polys,
                         polys,
                         &mut *buf,
                         &device_ks[k],
@@ -85,15 +88,6 @@ where
                 )?;
             };
             let size = 1 << (initial_poly_num_vars - round - 1);
-            let combine = self.gpu.get_func("sumcheck", "combine").unwrap();
-            let launch_config = LaunchConfig {
-                grid_dim: (num_blocks_per_poly as u32, 1, 1),
-                block_dim: (num_threads_per_block, 1, 1),
-                shared_mem_bytes: 0,
-            };
-            unsafe {
-                combine.launch(launch_config, (&mut *buf, size, num_polys))?;
-            };
             let sum = self.gpu.get_func("sumcheck", "sum").unwrap();
             let launch_config = LaunchConfig {
                 grid_dim: (1, 1, 1),
@@ -189,167 +183,6 @@ mod tests {
     use crate::{cpu, GPUSumcheckProver, SUMCHECK_PTX};
 
     #[test]
-    fn test_eval_at_k_and_combine() -> Result<(), DriverError> {
-        let num_vars = 10;
-        let num_polys = 3;
-        let max_degree = 3;
-        let rng = OsRng::default();
-
-        let combine_function = |args: &Vec<GoldilocksExt2>| args.iter().product();
-
-        let polys = (0..num_polys)
-            .map(|_| {
-                (0..1 << num_vars)
-                    .map(|i| {
-                        if i < 1024 {
-                            GoldilocksExt2::from_base(&Goldilocks::random(rng))
-                        } else {
-                            GoldilocksExt2::from_base(&Goldilocks::from(i))
-                        }
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
-
-        let mut gpu_api_wrapper = GPUSumcheckProver::<GoldilocksExt2>::setup()?;
-        gpu_api_wrapper.gpu.load_ptx(
-            Ptx::from_src(SUMCHECK_PTX),
-            "sumcheck",
-            &["fold_into_half", "combine", "sum"],
-        )?;
-
-        let mut cpu_round_evals = vec![];
-        let now = Instant::now();
-        let polys = polys.iter().map(|poly| poly.as_slice()).collect_vec();
-        for k in 0..max_degree + 1 {
-            cpu_round_evals.push(cpu::sumcheck::eval_at_k_and_combine(
-                num_vars,
-                polys.as_slice(),
-                &combine_function,
-                Goldilocks::from(k),
-            ));
-        }
-        println!(
-            "Time taken to eval_at_k_and_combine on cpu: {:.2?}",
-            now.elapsed()
-        );
-
-        // copy polynomials to device
-        let gpu_polys = gpu_api_wrapper
-            .copy_exts_to_device(&polys.concat().into_iter().map(|b| b.into()).collect_vec())?;
-        let device_ks = (0..max_degree + 1)
-            .map(|k| {
-                gpu_api_wrapper
-                    .gpu
-                    .htod_copy(vec![Goldilocks::from(k as u64).into()])
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut buf = gpu_api_wrapper.malloc_on_device(num_polys << (num_vars - 1))?;
-        let buf_view = RefCell::new(buf.slice_mut(..));
-        let mut round_evals = gpu_api_wrapper.malloc_on_device(max_degree as usize + 1)?;
-        let round_evals_view = RefCell::new(round_evals.slice_mut(..));
-        let round = 0;
-        let now = Instant::now();
-        gpu_api_wrapper.eval_at_k_and_combine(
-            num_vars,
-            round,
-            max_degree as usize,
-            num_polys,
-            &gpu_polys.slice(..),
-            &device_ks
-                .iter()
-                .map(|device_k| device_k.slice(..))
-                .collect_vec(),
-            buf_view.borrow_mut(),
-            round_evals_view.borrow_mut(),
-        )?;
-        println!(
-            "Time taken to eval_at_k_and_combine on gpu: {:.2?}",
-            now.elapsed()
-        );
-        let gpu_round_evals =
-            gpu_api_wrapper.dtoh_sync_copy(&round_evals.slice(0..(max_degree + 1) as usize))?;
-        cpu_round_evals
-            .iter()
-            .zip_eq(gpu_round_evals.iter())
-            .for_each(|(a, b)| {
-                assert_eq!(a, b);
-            });
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_fold_into_half_in_place() -> Result<(), DriverError> {
-        let num_vars = 6;
-        let num_polys = 4;
-
-        let rng = OsRng::default();
-        let mut polys = (0..num_polys)
-            .map(|_| {
-                (0..1 << num_vars)
-                    .map(|i| {
-                        if i < 1024 {
-                            GoldilocksExt2::from_base(&Goldilocks::random(rng))
-                        } else {
-                            GoldilocksExt2::from_base(&Goldilocks::from(i))
-                        }
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
-
-        let mut gpu_api_wrapper = GPUSumcheckProver::<GoldilocksExt2>::setup()?;
-        gpu_api_wrapper.gpu.load_ptx(
-            Ptx::from_src(SUMCHECK_PTX),
-            "sumcheck",
-            &["fold_into_half_in_place"],
-        )?;
-        // copy polynomials to device
-        let mut gpu_polys = gpu_api_wrapper.copy_exts_to_device(&polys.concat())?;
-        let challenge = GoldilocksExt2::from_base(&Goldilocks::random(rng));
-        let gpu_challenge = gpu_api_wrapper.copy_exts_to_device(&vec![challenge])?;
-        let round = 0;
-
-        let now = Instant::now();
-        gpu_api_wrapper.fold_into_half_in_place(
-            num_vars,
-            round,
-            num_polys,
-            &mut gpu_polys.slice_mut(..),
-            &gpu_challenge.slice(..),
-        )?;
-        println!(
-            "Time taken to fold_into_half_in_place on gpu: {:.2?}",
-            now.elapsed()
-        );
-
-        let gpu_result = (0..num_polys)
-            .map(|i| {
-                gpu_api_wrapper
-                    .dtoh_sync_copy(&gpu_polys.slice(i << num_vars..(i * 2 + 1) << (num_vars - 1)))
-            })
-            .collect::<Result<Vec<Vec<GoldilocksExt2>>, _>>()?;
-
-        let now = Instant::now();
-        (0..num_polys)
-            .for_each(|i| cpu::sumcheck::fold_into_half_in_place(&mut polys[i], challenge));
-        println!("Time taken to fold_into_half on cpu: {:.2?}", now.elapsed());
-        polys
-            .iter_mut()
-            .for_each(|poly| poly.truncate(1 << (num_vars - 1)));
-
-        gpu_result
-            .into_iter()
-            .zip_eq(polys)
-            .for_each(|(gpu_result, cpu_result)| {
-                assert_eq!(gpu_result, cpu_result);
-            });
-
-        Ok(())
-    }
-
-    #[test]
     fn test_prove_sumcheck() -> Result<(), DriverError> {
         let nowall = Instant::now();
         let num_vars = 26;
@@ -376,9 +209,8 @@ mod tests {
             Ptx::from_src(SUMCHECK_PTX),
             "sumcheck",
             &[
-                "fold_into_half",
+                "eval_at_k_and_product",
                 "fold_into_half_in_place",
-                "combine",
                 "sum",
                 "squeeze_challenge",
             ],
@@ -401,7 +233,7 @@ mod tests {
                     .htod_copy(vec![Goldilocks::from(k as u64).into()])
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let mut buf = gpu_api_wrapper.malloc_on_device(num_polys << (num_vars - 1))?;
+        let mut buf = gpu_api_wrapper.malloc_on_device(1 << (num_vars - 1))?;
         let buf_view = RefCell::new(buf.slice_mut(..));
 
         let mut challenges = gpu_api_wrapper.malloc_on_device(num_vars)?;
