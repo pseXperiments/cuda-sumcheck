@@ -1,7 +1,10 @@
 use ff::PrimeField;
 use itertools::Itertools;
 
-use crate::cpu::{arithmetic::barycentric_weights, parallel::parallelize};
+use crate::{
+    cpu::{arithmetic::barycentric_weights, parallel::parallelize},
+    transcript::Keccak256Transcript,
+};
 
 use super::arithmetic::barycentric_interpolate;
 
@@ -34,6 +37,40 @@ pub(crate) fn fold_into_half_in_place<F: PrimeField>(poly: &mut [F], challenge: 
                 *eval0 = challenge * (*eval1 - *eval0) + *eval0;
             });
     });
+}
+
+pub(crate) fn verify_sumcheck_transcript<F: PrimeField>(
+    num_vars: usize,
+    max_degree: usize,
+    sum: F,
+    transcript: &mut Keccak256Transcript<F>,
+) -> bool {
+    let points_vec: Vec<F> = (0..max_degree + 1)
+        .map(|i| F::from_u128(i as u128))
+        .collect();
+    let weights = barycentric_weights(&points_vec);
+    let mut expected_sum = sum;
+    for round_index in 0..num_vars {
+        let evals = transcript.read_field_elements(max_degree + 1).unwrap();
+        let round_poly_eval_at_0 = evals[0];
+        let round_poly_eval_at_1 = evals[1];
+
+        let computed_sum = round_poly_eval_at_0 + round_poly_eval_at_1;
+
+        // Check r_{i}(α_i) == r_{i+1}(0) + r_{i+1}(1)
+        if computed_sum != expected_sum {
+            println!("computed_sum : {:?}", computed_sum);
+            println!("expected_sum : {:?}", expected_sum);
+            println!("round index : {}", round_index);
+            return false;
+        }
+
+        let challenge = transcript.squeeze_challenge();
+
+        // Compute r_{i}(α_i) using barycentric interpolation
+        expected_sum = barycentric_interpolate(&weights, &points_vec, &evals, &challenge);
+    }
+    true
 }
 
 pub(crate) fn verify_sumcheck<F: PrimeField>(
