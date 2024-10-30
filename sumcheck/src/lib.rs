@@ -15,6 +15,8 @@ use std::time::Instant;
 mod cpu;
 pub mod fieldbinding;
 pub mod gpu;
+pub mod transcript;
+pub mod utils;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -71,6 +73,21 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         Ok(device_data)
     }
 
+    pub fn overwrite_to_device(
+        &self,
+        host_data: &[F],
+        dst: &mut CudaSlice<FieldBinding>,
+    ) -> Result<(), DriverError> {
+        self.gpu.htod_copy_into(
+            host_data
+                .into_iter()
+                .map(|&eval| F::to_canonical_form(eval))
+                .collect(),
+            dst,
+        )?;
+        Ok(())
+    }
+
     pub fn malloc_on_device(&self, len: usize) -> Result<CudaSlice<FieldBinding>, DriverError> {
         let device_ptr = unsafe { self.gpu.alloc::<FieldBinding>(len)? };
         Ok(device_ptr)
@@ -122,4 +139,10 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
     pub fn shared_mem_bytes_per_block(&self) -> Result<usize, DriverError> {
         Ok(self.gpu.attribute(cudarc::driver::sys::CUdevice_attribute::CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK)? as usize)
     }
+}
+
+#[derive(Debug)]
+pub enum LibraryError {
+    Driver(DriverError),
+    Transcript(std::io::ErrorKind, String),
 }
