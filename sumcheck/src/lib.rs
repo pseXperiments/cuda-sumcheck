@@ -81,7 +81,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         self.gpu.htod_copy_into(
             host_data
                 .into_iter()
-                .map(|&eval| F::to_canonical_form(eval))
+                .map(|&fe| F::to_montgomery_form(fe))
                 .collect(),
             dst,
         )?;
