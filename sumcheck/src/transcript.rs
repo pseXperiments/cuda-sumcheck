@@ -25,6 +25,18 @@ impl<H: Hash, F: PrimeField> CudaTranscript<H, F> {
         Self::default()
     }
 
+    pub fn into_proof(self) -> Vec<u8> {
+        self.stream.into_inner()
+    }
+
+    pub fn from_proof(proof: &[u8]) -> Self {
+        Self {
+            state: H::default(),
+            stream: Cursor::new(proof.to_vec()),
+            marker: PhantomData::default(),
+        }
+    }
+
     pub fn squeeze_challenge(&mut self) -> F {
         let hash = self.state.finalize_fixed_reset();
         self.state.update(&hash);

@@ -46,7 +46,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 round,
                 num_polys,
                 polys,
-                &challenge,
+                challenge,
             )?;
         }
         Ok(())
@@ -111,16 +111,8 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 shared_mem_bytes: 0,
             };
             unsafe {
-                sum.launch(
-                    launch_config,
-                    (
-                        &mut *buf,
-                        &mut *round_evals,
-                        size >> 1,
-                        round * (max_degree + 1) + k,
-                    ),
-                )
-                .map_err(|e| LibraryError::Driver(e))?;
+                sum.launch(launch_config, (&mut *buf, &mut *round_evals, size >> 1, k))
+                    .map_err(|e| LibraryError::Driver(e))?;
             };
         }
         let fes = self
@@ -390,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_prove_sumcheck() -> Result<(), LibraryError> {
-        let num_vars = 4;
+        let num_vars = 25;
         let num_polys = 2;
         let max_degree = 2;
 
@@ -457,7 +449,7 @@ mod tests {
             .malloc_on_device(1)
             .map_err(|e| LibraryError::Driver(e))?;
         let mut round_evals = gpu_api_wrapper
-            .malloc_on_device(num_vars * (max_degree + 1))
+            .malloc_on_device(max_degree + 1)
             .map_err(|e| LibraryError::Driver(e))?;
         let round_evals_view = RefCell::new(round_evals.slice_mut(..));
         println!("Time taken to copy data to device : {:.2?}", now.elapsed());
@@ -487,21 +479,10 @@ mod tests {
             now.elapsed()
         );
 
-        // let challenges = gpu_api_wrapper
-        //     .dtoh_sync_copy(&challenges.slice(..), true)
-        //     .map_err(|e| LibraryError::Driver(e))?;
-        // let round_evals = (0..num_vars)
-        //     .map(|i| {
-        //         gpu_api_wrapper.dtoh_sync_copy(
-        //             &round_evals.slice(i * (max_degree + 1)..(i + 1) * (max_degree + 1)),
-        //             true,
-        //         )
-        //     })
-        //     .collect::<Result<Vec<Vec<Fr>>, _>>()
-        //     .map_err(|e| LibraryError::Driver(e))?;
-
+        let proof = transcript.into_proof();
+        let mut transcript = Keccak256Transcript::<Fr>::from_proof(&proof);
         let result =
-            cpu::sumcheck::verify_sumcheck_transcript(num_vars, max_degree, sum, &mut transcript);
+            cpu::sumcheck::verify_sumcheck(num_vars, max_degree, sum, &mut transcript);
         assert!(result);
         Ok(())
     }
