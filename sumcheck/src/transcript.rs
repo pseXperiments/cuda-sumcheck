@@ -1,26 +1,24 @@
 use crate::{
-    fieldbinding::{FromFieldBinding, ToFieldBinding},
     utils::{arithmetic::fe_mod_from_le_bytes, hash::Hash},
-    GPUApiWrapper, LibraryError,
+    LibraryError,
 };
 use ff::PrimeField;
-use halo2curves::serde::SerdeObject;
 use sha3::Keccak256;
 use std::{
     io::{Cursor, Read, Write},
     marker::PhantomData,
 };
 
-pub type Keccak256Transcript<F> = CudaTranscript<Keccak256, F>;
+pub type Keccak256Transcript<F> = Transcript<Keccak256, F>;
 
 #[derive(Debug, Default)]
-pub struct CudaTranscript<H, F> {
+pub struct Transcript<H, F> {
     pub stream: Cursor<Vec<u8>>,
     pub state: H,
     marker: PhantomData<F>,
 }
 
-impl<H: Hash, F: PrimeField> CudaTranscript<H, F> {
+impl<H: Hash, F: PrimeField> Transcript<H, F> {
     pub fn new() -> Self {
         Self::default()
     }

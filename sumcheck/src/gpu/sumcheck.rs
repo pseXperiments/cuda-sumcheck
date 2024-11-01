@@ -115,10 +115,10 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                     .map_err(|e| LibraryError::Driver(e))?;
             };
         }
-        let fes = self
+        let round_eval_values = self
             .dtoh_sync_copy(&round_evals.slice(0..(max_degree + 1) as usize), true)
             .map_err(|e| LibraryError::Driver(e))?;
-        transcript.write_field_elements(&fes)?;
+        transcript.write_field_elements(&round_eval_values)?;
         Ok(())
     }
 
@@ -481,8 +481,7 @@ mod tests {
 
         let proof = transcript.into_proof();
         let mut transcript = Keccak256Transcript::<Fr>::from_proof(&proof);
-        let result =
-            cpu::sumcheck::verify_sumcheck(num_vars, max_degree, sum, &mut transcript);
+        let result = cpu::sumcheck::verify_sumcheck(num_vars, max_degree, sum, &mut transcript);
         assert!(result);
         Ok(())
     }
