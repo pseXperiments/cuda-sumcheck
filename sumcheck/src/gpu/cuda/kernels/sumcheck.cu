@@ -2,7 +2,7 @@
 
 using namespace bb;
 
-// TODO
+// TODO: Clookup combining equation
 __device__ fr combine_function(fr* evals, unsigned int start, unsigned int stride, unsigned int num_args) {
     fr result = fr::one();
     for (int i = 0; i < num_args; i++) result *= evals[start + i * stride];
