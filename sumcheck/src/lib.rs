@@ -33,7 +33,7 @@ const SUMCHECK_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/sumcheck.ptx"
 
 /// Wrapper struct for APIs using GPU
 pub struct GPUApiWrapper<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> {
-    gpu: Arc<CudaDevice>,
+    pub gpu: Arc<CudaDevice>,
     _marker: PhantomData<F>,
 }
 
