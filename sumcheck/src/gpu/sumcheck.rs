@@ -22,6 +22,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         challenge: &mut CudaSlice<FieldBinding>,
         round_evals: RefCell<CudaViewMut<FieldBinding>>,
         transcript: &mut Keccak256Transcript<F>,
+        challenges: &mut Vec<F>,
     ) -> Result<(), LibraryError> {
         let initial_poly_num_vars = num_vars;
         for round in 0..num_vars {
@@ -37,8 +38,10 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
                 transcript,
             )?;
             // squeeze challenge
-            let alpha = vec![transcript.squeeze_challenge()];
-            self.overwrite_to_device(alpha.as_slice(), challenge)
+            let alpha = transcript.squeeze_challenge();
+            challenges.push(alpha);
+            let c = vec![alpha];
+            self.overwrite_to_device(c.as_slice(), challenge)
                 .map_err(|e| LibraryError::Driver(e))?;
             // fold_into_half_in_place
             self.fold_into_half_in_place(
@@ -455,6 +458,7 @@ mod tests {
         println!("Time taken to copy data to device : {:.2?}", now.elapsed());
 
         let now = Instant::now();
+        let mut unused_c = vec![];
         gpu_api_wrapper.prove_sumcheck(
             num_vars,
             num_polys,
@@ -469,6 +473,7 @@ mod tests {
             &mut challenges,
             round_evals_view,
             &mut transcript,
+            &mut unused_c,
         )?;
         gpu_api_wrapper
             .gpu
