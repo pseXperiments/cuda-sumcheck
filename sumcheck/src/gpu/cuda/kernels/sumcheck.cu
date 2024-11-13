@@ -10,11 +10,10 @@ using namespace bb;
 // table equation: x_0 * 2^{table_dim-1} + x_1 * 2^{table_dim-2} + ...
 __device__ fr combine_function(fr* evals, unsigned int start, unsigned int stride, unsigned int num_args, fr* gamma) {
     unsigned int table_dim = num_args - 2;
-    fr composed_value = fr::zero();
+    fr result = fr::zero();
     for (int i = 1; i <= table_dim; i++)
-        composed_value += fr(1 << (table_dim - i)) * evals[start + i * stride];
-    fr result;
-    result = evals[start] - composed_value;
+        result += fr(1 << (num_args - 2 - i)) * evals[start + i * stride];
+    result = evals[start] - result;
     for (int i = 1; i <= table_dim; i++)
         result += gamma->pow(i) * evals[start + i * stride] * (evals[start + i * stride] - fr::one());
     result *= evals[start + (num_args - 1) * stride];
