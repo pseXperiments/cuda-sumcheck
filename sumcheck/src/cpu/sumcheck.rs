@@ -1,10 +1,8 @@
 use ff::PrimeField;
 use itertools::Itertools;
+use transcript_utils::transcript::FieldTranscriptRead;
 
-use crate::{
-    cpu::{arithmetic::barycentric_weights, parallel::parallelize},
-    transcript::Keccak256Transcript,
-};
+use crate::cpu::{arithmetic::barycentric_weights, parallel::parallelize};
 
 use super::arithmetic::barycentric_interpolate;
 
@@ -43,7 +41,7 @@ pub(crate) fn verify_sumcheck<F: PrimeField>(
     num_vars: usize,
     max_degree: usize,
     sum: F,
-    transcript: &mut Keccak256Transcript<F>,
+    transcript: &mut impl FieldTranscriptRead<F>,
 ) -> bool {
     let points_vec: Vec<F> = (0..max_degree + 1)
         .map(|i| F::from_u128(i as u128))

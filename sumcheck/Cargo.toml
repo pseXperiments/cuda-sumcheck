@@ -16,6 +16,7 @@ rand = "0.8"
 num-integer = "0.1.45"
 sha3 = "0.10.6"
 num-bigint = "0.4.3"
+transcript_utils = { git = "https://github.com/pseXperiments/transcript_utils" }
 
 [build-dependencies]
 bindgen = "0.66.1"

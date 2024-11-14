@@ -15,7 +15,7 @@ use std::time::Instant;
 mod cpu;
 pub mod fieldbinding;
 pub mod gpu;
-pub mod transcript;
+// pub mod transcript;
 pub mod utils;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
@@ -144,5 +144,5 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
 #[derive(Debug)]
 pub enum LibraryError {
     Driver(DriverError),
-    Transcript(std::io::ErrorKind, String),
+    Transcript,
 }
