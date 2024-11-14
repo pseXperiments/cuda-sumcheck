@@ -23,6 +23,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
         round_evals: RefCell<CudaViewMut<FieldBinding>>,
         transcript: &mut impl FieldTranscriptWrite<F>,
         gamma: &CudaView<FieldBinding>,
+        challenges: &mut Vec<F>,
     ) -> Result<(), LibraryError> {
         let initial_poly_num_vars = num_vars;
         for round in 0..num_vars {
@@ -41,6 +42,7 @@ impl<F: PrimeField + FromFieldBinding<F> + ToFieldBinding<F>> GPUApiWrapper<F> {
             // squeeze challenge
             let alpha = transcript.squeeze_challenge();
             let c = vec![alpha];
+            challenges.push(alpha);
             self.overwrite_to_device(c.as_slice(), challenge)
                 .map_err(|e| LibraryError::Driver(e))?;
             // fold_into_half_in_place
