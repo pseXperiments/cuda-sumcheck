@@ -12,7 +12,7 @@ __device__ fr combine_function(fr* evals, unsigned int start, unsigned int strid
     unsigned int table_dim = num_args - 2;
     fr result = fr::zero();
     for (int i = 1; i <= table_dim; i++)
-        result += fr(1 << (num_args - 2 - i)) * evals[start + i * stride];
+        result += fr(1 << (i - 1)) * evals[start + i * stride];
     result = evals[start] - result;
     for (int i = 1; i <= table_dim; i++)
         result += gamma->pow(i) * evals[start + i * stride] * (evals[start + i * stride] - fr::one());
